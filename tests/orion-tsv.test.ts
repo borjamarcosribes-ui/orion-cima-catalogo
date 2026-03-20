@@ -13,6 +13,34 @@ function readFixture(name: string): Uint8Array {
 }
 
 describe('parseOrionCatalogTsv', () => {
+  it('preserves UTF-8 text with accents without mojibake', () => {
+    const result = parseOrionCatalogTsv(readFixture('orion-catalog-utf8.tsv'), {
+      sourceFile: 'orion-catalog-utf8.tsv',
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.items[0]).toMatchObject({
+      articleCode: 'ART-UTF8',
+      shortDescription: 'Solución oral',
+      statusNormalized: 'ACTIVO',
+    });
+    expect(result.items[0]?.shortDescription).not.toContain('SoluciÃ³n');
+  });
+
+  it('preserves cp1252 text with accents without mojibake', () => {
+    const result = parseOrionCatalogTsv(readFixture('orion-catalog-cp1252.tsv'), {
+      sourceFile: 'orion-catalog-cp1252.tsv',
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.items[0]).toMatchObject({
+      articleCode: 'ART-001',
+      shortDescription: 'Solución oral',
+      statusNormalized: 'ACTIVO',
+    });
+    expect(result.items[0]?.shortDescription).not.toContain('SoluciÃ³n');
+  });
+
   it('parses a valid TSV, preserves accepted statuses and warns on identical duplicates', () => {
     const result = parseOrionCatalogTsv(readFixture('orion-catalog-valid.tsv'), {
       sourceFile: 'orion-catalog-valid.tsv',
@@ -24,19 +52,6 @@ describe('parseOrionCatalogTsv', () => {
     expect(result.items).toHaveLength(3);
     expect(result.warnings.some((warning) => warning.code === 'DUPLICATE_IDENTICAL_ROWS')).toBe(true);
     expect(result.items.map((item) => item.statusNormalized)).toEqual(['ACTIVO', 'IC_AUTO', 'ESTADO_LIBRE']);
-  });
-
-  it('decodes cp1252/latin1 fixtures before falling back to utf-8', () => {
-    const result = parseOrionCatalogTsv(readFixture('orion-catalog-cp1252.tsv'), {
-      sourceFile: 'orion-catalog-cp1252.tsv',
-    });
-
-    expect(result.errors).toEqual([]);
-    expect(result.items[0]).toMatchObject({
-      articleCode: 'ART-001',
-      shortDescription: 'Solución oral',
-      statusNormalized: 'ACTIVO',
-    });
   });
 
   it('reports missing required columns', () => {
@@ -67,6 +82,21 @@ describe('parseOrionCatalogTsv', () => {
     expect(result.errors[0]).toMatchObject({
       code: 'DUPLICATE_CONFLICT',
       rowNumbers: [2, 3],
+    });
+  });
+
+  it('ignores completely empty rows and reports structural errors for incomplete rows', () => {
+    const result = parseOrionCatalogTsv(readFixture('orion-catalog-row-validation.tsv'), {
+      sourceFile: 'orion-catalog-row-validation.tsv',
+    });
+
+    expect(result.rowCount).toBe(2);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.articleCode).toBe('ART-VAL-001');
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toMatchObject({
+      code: 'INVALID_STRUCTURE',
+      rowNumbers: [4],
     });
   });
 });

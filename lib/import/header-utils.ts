@@ -2,7 +2,10 @@ import type { NormalizedHeader } from '@/lib/import/types';
 
 export function normalizeHeaderValue(value: string | null | undefined): string {
   if (value === null || value === undefined) return '';
-  return String(value).trim();
+  return String(value)
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function buildNormalizedHeaders(values: Array<string | number | boolean | null | undefined>): NormalizedHeader[] {

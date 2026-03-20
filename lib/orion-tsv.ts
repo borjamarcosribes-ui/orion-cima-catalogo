@@ -5,20 +5,27 @@ const REQUIRED_COLUMNS = ['Artículo', 'Descripción', 'Estado de Artículo'] as
 const OPTIONAL_COLUMNS = ['Descripción Larga', 'Unidad de Medida Principal'] as const;
 const IGNORED_COLUMNS = new Set(['Tipo Art. Usuario', '[ ]']);
 
-function decodeText(bytes: Uint8Array, encoding: string): string {
-  return new TextDecoder(encoding).decode(bytes);
+function decodeUtf8Strict(bytes: Uint8Array): string {
+  return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
 }
 
-function tryDecodeTsv(bytes: Uint8Array) {
-  const attempts = [
-    { encoding: 'windows-1252', text: decodeText(bytes, 'windows-1252') },
-    { encoding: 'latin1', text: decodeText(bytes, 'latin1') },
-    { encoding: 'utf-8', text: decodeText(bytes, 'utf-8') },
-  ];
-
-  return attempts;
+function decodeWindows1252(bytes: Uint8Array): string {
+  return new TextDecoder('windows-1252').decode(bytes);
 }
 
+function decodeTsv(bytes: Uint8Array): { encoding: 'utf-8' | 'windows-1252'; text: string } {
+  try {
+    return {
+      encoding: 'utf-8',
+      text: decodeUtf8Strict(bytes),
+    };
+  } catch {
+    return {
+      encoding: 'windows-1252',
+      text: decodeWindows1252(bytes),
+    };
+  }
+}
 
 function removeCompletelyEmptyColumns(rows: string[][]): string[][] {
   if (rows.length === 0) {
@@ -44,16 +51,20 @@ function splitTsvRows(text: string): string[][] {
 }
 
 function collapseWhitespace(value: string): string {
-  return value.trim().replace(/\s+/g, ' ');
+  return value.replace(/\u00A0/g, ' ').trim().replace(/\s+/g, ' ');
 }
 
 function normalizeNullable(value: string | undefined): string | null {
-  const normalized = (value ?? '').trim();
+  const normalized = collapseWhitespace(value ?? '');
   return normalized.length > 0 ? normalized : null;
 }
 
 function normalizeStatus(value: string): string {
-  return value.trim().toUpperCase().replace(/\s+/g, '_');
+  return collapseWhitespace(value).toUpperCase().replace(/\s+/g, '_');
+}
+
+function isCompletelyEmptyRow(cells: string[]): boolean {
+  return cells.every((cell) => normalizeHeaderValue(cell).length === 0);
 }
 
 function buildConflictError(articleCode: string, firstItem: OrionCatalogItem, nextItem: OrionCatalogItem): ParseError {
@@ -65,6 +76,17 @@ function buildConflictError(articleCode: string, firstItem: OrionCatalogItem, ne
       articleCode,
       firstRow: firstItem.rowNumber,
       secondRow: nextItem.rowNumber,
+    },
+  };
+}
+
+function buildRowStructureError(rowNumber: number, missingFields: string[]): ParseError {
+  return {
+    code: 'INVALID_STRUCTURE',
+    message: `La fila ${rowNumber} contiene datos pero carece de campos obligatorios: ${missingFields.join(', ')}.`,
+    rowNumbers: [rowNumber],
+    context: {
+      missingFields,
     },
   };
 }
@@ -116,7 +138,11 @@ function parseRowsToItems(rows: string[][], sourceFile: string, warnings: ParseW
 
   const unnamedNonEmptyColumns = headerRow
     .map((header, index) => ({ header: String(header ?? ''), index }))
-    .filter(({ header, index }) => normalizeHeaderValue(header).length === 0 && sanitizedRows.slice(1).some((row) => normalizeHeaderValue(row[index] ?? '').length > 0));
+    .filter(
+      ({ header, index }) =>
+        normalizeHeaderValue(header).length === 0 &&
+        sanitizedRows.slice(1).some((row) => normalizeHeaderValue(row[index] ?? '').length > 0),
+    );
 
   if (unnamedNonEmptyColumns.length > 0) {
     warnings.push({
@@ -173,14 +199,31 @@ function parseRowsToItems(rows: string[][], sourceFile: string, warnings: ParseW
   const itemsByArticleCode = new Map<string, OrionCatalogItem>();
   const errors: ParseError[] = [];
   let duplicateCount = 0;
+  let rowCount = 0;
 
   const dataRows = sanitizedRows.slice(1);
   for (const [index, cells] of dataRows.entries()) {
+    if (isCompletelyEmptyRow(cells)) {
+      continue;
+    }
+
+    rowCount += 1;
+
     const rowNumber = index + 2;
     const rowRecord = Object.fromEntries(headerRow.map((header, cellIndex) => [String(header ?? ''), cells[cellIndex] ?? '']));
-    const articleCode = (rowRecord[articleKey] ?? '').trim().toUpperCase();
+    const articleCode = collapseWhitespace(rowRecord[articleKey] ?? '').toUpperCase();
     const shortDescription = collapseWhitespace(rowRecord[descriptionKey] ?? '');
     const statusOriginal = rowRecord[statusKey] ?? '';
+    const missingFields = [
+      articleCode.length === 0 ? 'Artículo' : null,
+      shortDescription.length === 0 ? 'Descripción' : null,
+      collapseWhitespace(statusOriginal).length === 0 ? 'Estado de Artículo' : null,
+    ].filter((value): value is string => value !== null);
+
+    if (missingFields.length > 0) {
+      errors.push(buildRowStructureError(rowNumber, missingFields));
+      continue;
+    }
 
     const item: OrionCatalogItem = {
       articleCode,
@@ -213,13 +256,13 @@ function parseRowsToItems(rows: string[][], sourceFile: string, warnings: ParseW
     errors.push(buildConflictError(item.articleCode, existing, item));
   }
 
-  if (errors.length > 0) {
+  if (errors.some((error) => error.code === 'DUPLICATE_CONFLICT')) {
     return {
       headers: visibleHeaders,
       items: [],
       warnings,
       errors,
-      rowCount: dataRows.length,
+      rowCount,
       duplicateCount,
     };
   }
@@ -229,7 +272,7 @@ function parseRowsToItems(rows: string[][], sourceFile: string, warnings: ParseW
     items: [...itemsByArticleCode.values()],
     warnings,
     errors,
-    rowCount: dataRows.length,
+    rowCount,
     duplicateCount,
   };
 }
@@ -240,27 +283,16 @@ export function parseOrionCatalogTsv(
 ): ParseResult<OrionCatalogItem> {
   const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
   const decodingWarnings: ParseWarning[] = [];
-  const attempts = tryDecodeTsv(bytes);
+  const decoded = decodeTsv(bytes);
+  const parsed = parseRowsToItems(splitTsvRows(decoded.text), options.sourceFile, [...decodingWarnings]);
 
-  for (const attempt of attempts) {
-    try {
-      const parsed = parseRowsToItems(splitTsvRows(attempt.text), options.sourceFile, [...decodingWarnings]);
-      if (parsed.errors.length === 0 || attempt.encoding === attempts[attempts.length - 1].encoding) {
-        if (attempt.encoding !== 'windows-1252') {
-          parsed.warnings.unshift({
-            code: 'DECODING_FALLBACK_USED',
-            message: `Se ha usado ${attempt.encoding} como fallback de decodificación para el TSV de Orion.`,
-            context: { encoding: attempt.encoding },
-          });
-        }
-        return parsed;
-      }
-    } catch (error) {
-      if (attempt.encoding === attempts[attempts.length - 1].encoding) {
-        throw error;
-      }
-    }
+  if (decoded.encoding === 'windows-1252') {
+    parsed.warnings.unshift({
+      code: 'DECODING_FALLBACK_USED',
+      message: 'Se ha usado windows-1252 como fallback de decodificación para el TSV de Orion.',
+      context: { encoding: 'windows-1252' },
+    });
   }
 
-  return parseRowsToItems(splitTsvRows(attempts[0].text), options.sourceFile, decodingWarnings);
+  return parsed;
 }
