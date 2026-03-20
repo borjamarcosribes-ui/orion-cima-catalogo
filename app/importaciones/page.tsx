@@ -1,14 +1,94 @@
-import {
-  currentDuplicateConflicts,
-  currentSnapshot,
-  dashboardMetrics,
-  importConfigTemplate,
-  sampleRows,
-} from '@/lib/demo-data';
+'use client';
+
+import { useMemo, useState } from 'react';
+
+import { parseOrionCatalogTsv } from '@/lib/orion-tsv';
+import type { ParseResult, OrionCatalogItem } from '@/lib/import/types';
+
+type ImportState = {
+  fileName: string;
+  result: ParseResult<OrionCatalogItem> | null;
+  extensionError: string | null;
+};
+
+const emptyState: ImportState = {
+  fileName: '',
+  result: null,
+  extensionError: null,
+};
 
 export default function ImportsPage() {
-  const validRows = sampleRows.filter((row) => row.isValidMedicine);
-  const discardedRows = sampleRows.filter((row) => !row.isValidMedicine);
+  const [state, setState] = useState<ImportState>(emptyState);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const summary = useMemo(() => {
+    if (!state.result) return null;
+
+    return {
+      rowCount: state.result.rowCount,
+      validItems: state.result.items.length,
+      duplicateCount: state.result.duplicateCount,
+      warningCount: state.result.warnings.length,
+      errorCount: state.result.errors.length,
+    };
+  }, [state.result]);
+
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      setState(emptyState);
+      return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.tsv')) {
+      setState({
+        fileName: file.name,
+        result: null,
+        extensionError: 'Solo se permiten ficheros .tsv en esta pantalla.',
+      });
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const buffer = await file.arrayBuffer();
+      const result = parseOrionCatalogTsv(buffer, { sourceFile: file.name });
+
+      setState({
+        fileName: file.name,
+        result,
+        extensionError: null,
+      });
+    } catch (error) {
+      setState({
+        fileName: file.name,
+        result: {
+          headers: [],
+          items: [],
+          warnings: [],
+          errors: [
+            {
+              code: 'INVALID_STRUCTURE',
+              message:
+                error instanceof Error
+                  ? error.message
+                  : 'Se produjo un error inesperado al procesar el fichero TSV.',
+            },
+          ],
+          rowCount: 0,
+          duplicateCount: 0,
+        },
+        extensionError: null,
+      });
+    } finally {
+      setIsLoading(false);
+      event.target.value = '';
+    }
+  }
+
+  const hasErrors = Boolean(state.result && state.result.errors.length > 0);
 
   return (
     <div className="grid" style={{ gap: 24 }}>
@@ -16,140 +96,167 @@ export default function ImportsPage() {
         <div className="section-title">
           <div>
             <div className="badge primary">Importaciones</div>
-            <h1>Demo del flujo de importación XLS/XLSX</h1>
+            <h1>Importación real de catálogo Orion TSV</h1>
           </div>
-          <span className="badge warning">Sin subida real de ficheros en esta iteración</span>
+          <span className="badge success">Vista previa sin persistencia</span>
         </div>
-        <p className="muted">
-          Esta pantalla no procesa todavía un Excel real desde la interfaz. Solo demuestra el flujo esperado de
-          mapeo, validación y generación de snapshot usando datos semilla mientras se espera el XLS real de Orion.
+
+        <p className="muted" style={{ marginTop: 8 }}>
+          Selecciona un fichero TSV exportado desde Orion Logis para validarlo y ver una vista previa antes de guardar
+          nada en base de datos.
         </p>
-        <div className="grid cols-3">
-          <div className="card" style={{ boxShadow: 'none' }}>
-            <strong>Formato objetivo</strong>
-            <p className="muted">El dominio ya contempla XLS/XLSX para medicamentos y TSV para catálogo de artículos Orion.</p>
-          </div>
-          <div className="card" style={{ boxShadow: 'none' }}>
-            <strong>Mapeo demo</strong>
-            <p className="muted">codeColumn={importConfigTemplate.codeColumn}, descriptionColumn={importConfigTemplate.descriptionColumn}</p>
-          </div>
-          <div className="card" style={{ boxShadow: 'none' }}>
-            <strong>Política de deduplicación</strong>
-            <p className="muted">Gana la primera fila válida observada para cada CN y las duplicadas se reportan como conflicto.</p>
-          </div>
+
+        <div style={{ marginTop: 20, display: 'grid', gap: 12 }}>
+          <label htmlFor="tsv-file" style={{ fontWeight: 600 }}>
+            Seleccionar fichero TSV
+          </label>
+          <input
+            id="tsv-file"
+            type="file"
+            accept=".tsv,text/tab-separated-values"
+            onChange={handleFileChange}
+            disabled={isLoading}
+          />
+          <p className="muted" style={{ margin: 0 }}>
+            Solo se aceptan archivos <strong>.tsv</strong>.
+          </p>
         </div>
       </section>
 
-      <section className="grid cols-3">
-        <article className="card">
-          <div className="badge primary">Filas válidas</div>
-          <div className="metric">{dashboardMetrics.latestValidRows}</div>
-          <div className="muted">Filas del batch que cumplen ^\d{6}\.CNA$.</div>
-        </article>
-        <article className="card">
-          <div className="badge success">CN únicos en snapshot</div>
-          <div className="metric">{dashboardMetrics.latestUniqueNationalCodes}</div>
-          <div className="muted">medicines_snapshot conserva una sola fila ganadora por CN.</div>
-        </article>
-        <article className="card">
-          <div className="badge warning">Filas duplicadas colapsadas</div>
-          <div className="metric">{dashboardMetrics.duplicateValidRowsCollapsed}</div>
-          <div className="muted">Filas válidas posteriores con un CN ya visto que no pasan al snapshot.</div>
-        </article>
-      </section>
-
-      <section className="grid cols-2">
-        <article className="card">
+      {!state.fileName && !state.extensionError && !state.result ? (
+        <section className="card">
           <div className="section-title">
-            <h2>Filas válidas detectadas en la demo</h2>
-            <span className="badge success">{validRows.length} filas válidas</span>
+            <h2>Estado inicial</h2>
+            <span className="badge primary">Sin fichero</span>
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Fila</th>
-                <th>Código</th>
-                <th>CN</th>
-                <th>Descripción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {validRows.map((row) => (
-                <tr key={`${row.rowNumber}-${row.orionCode}-${row.description}`}>
-                  <td>{row.rowNumber}</td>
-                  <td>{row.orionCode}</td>
-                  <td>{row.nationalCode}</td>
-                  <td>{row.description}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
+          <p className="muted">
+            Todavía no has cargado ningún archivo. Prueba con un export real de Orion o con uno de los fixtures de
+            tests.
+          </p>
+        </section>
+      ) : null}
 
-        <article className="card">
+      {state.extensionError ? (
+        <section className="card" style={{ border: '1px solid #dc2626' }}>
           <div className="section-title">
-            <h2>Filas descartadas en la demo</h2>
-            <span className="badge danger">{discardedRows.length} descartadas</span>
+            <h2>Error de extensión</h2>
+            <span className="badge danger">Bloqueado</span>
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Fila</th>
-                <th>Código</th>
-                <th>Motivo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {discardedRows.map((row) => (
-                <tr key={`${row.rowNumber}-${row.orionCode || 'sin-codigo'}`}>
-                  <td>{row.rowNumber}</td>
-                  <td>{row.orionCode || '—'}</td>
-                  <td>{row.discardReason}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
-      </section>
+          <p>{state.extensionError}</p>
+        </section>
+      ) : null}
 
-      <section className="grid cols-2">
-        <article className="card">
+      {state.fileName && summary ? (
+        <section className="grid cols-3">
+          <article className="card">
+            <div className="badge primary">Fichero cargado</div>
+            <div style={{ marginTop: 12, fontWeight: 700, wordBreak: 'break-word' }}>{state.fileName}</div>
+            <div className="muted" style={{ marginTop: 8 }}>
+              Archivo procesado en cliente.
+            </div>
+          </article>
+
+          <article className="card">
+            <div className="badge success">Resumen</div>
+            <div style={{ marginTop: 12, display: 'grid', gap: 6 }}>
+              <div>
+                <strong>Filas leídas:</strong> {summary.rowCount}
+              </div>
+              <div>
+                <strong>Items válidos:</strong> {summary.validItems}
+              </div>
+              <div>
+                <strong>Duplicados detectados:</strong> {summary.duplicateCount}
+              </div>
+            </div>
+          </article>
+
+          <article className="card">
+            <div className="badge warning">Mensajes</div>
+            <div style={{ marginTop: 12, display: 'grid', gap: 6 }}>
+              <div>
+                <strong>Warnings:</strong> {summary.warningCount}
+              </div>
+              <div>
+                <strong>Errors:</strong> {summary.errorCount}
+              </div>
+              <div className="muted">{hasErrors ? 'La tabla se bloquea si hay errores.' : 'Vista previa disponible.'}</div>
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      {state.result?.warnings.length ? (
+        <section className="card" style={{ border: '1px solid #f59e0b' }}>
           <div className="section-title">
-            <h2>Snapshot demo (CN únicos por batch)</h2>
-            <span className="badge primary">{currentSnapshot.length} CN únicos</span>
+            <h2>Warnings</h2>
+            <span className="badge warning">{state.result.warnings.length}</span>
           </div>
           <ul className="list">
-            {currentSnapshot.map((item) => (
-              <li key={`${item.importBatchId}-${item.nationalCode}`}>
-                <strong>{item.nationalCode}</strong>
-                <div className="muted">{item.localDescription} · código Orion {item.orionCode} · fila ganadora {item.sourceRowNumber}</div>
+            {state.result.warnings.map((warning, index) => (
+              <li key={`${warning.code}-${index}`}>
+                <strong>{warning.code}</strong>
+                <div className="muted">{warning.message}</div>
               </li>
             ))}
           </ul>
-        </article>
+        </section>
+      ) : null}
 
-        <article className="card">
+      {state.result?.errors.length ? (
+        <section className="card" style={{ border: '1px solid #dc2626' }}>
           <div className="section-title">
-            <h2>Conflictos de duplicados por CN</h2>
-            <span className="badge warning">{dashboardMetrics.duplicateNationalCodes} CN con conflicto</span>
+            <h2>Errores</h2>
+            <span className="badge danger">{state.result.errors.length}</span>
           </div>
-          {currentDuplicateConflicts.length === 0 ? (
-            <p className="muted">No hay duplicados válidos en esta demo.</p>
+          <ul className="list">
+            {state.result.errors.map((error, index) => (
+              <li key={`${error.code}-${index}`}>
+                <strong>{error.code}</strong>
+                <div className="muted">{error.message}</div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {state.result && !hasErrors ? (
+        <section className="card">
+          <div className="section-title">
+            <h2>Vista previa de items válidos</h2>
+            <span className="badge success">{state.result.items.length} items</span>
+          </div>
+
+          {state.result.items.length === 0 ? (
+            <p className="muted">El parser no ha producido items válidos para este fichero.</p>
           ) : (
-            <ul className="list">
-              {currentDuplicateConflicts.map((conflict) => (
-                <li key={conflict.nationalCode}>
-                  <strong>{conflict.nationalCode}</strong>
-                  <div className="muted">
-                    Gana la fila {conflict.keptRowNumber} ({conflict.keptLocalDescription}). Se descartan las filas{' '}
-                    {conflict.discardedRowNumbers.join(', ')}.
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>articleCode</th>
+                    <th>shortDescription</th>
+                    <th>unit</th>
+                    <th>statusOriginal</th>
+                    <th>statusNormalized</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.result.items.map((item) => (
+                    <tr key={`${item.articleCode}-${item.rowNumber}`}>
+                      <td>{item.articleCode}</td>
+                      <td>{item.shortDescription}</td>
+                      <td>{item.unit ?? '—'}</td>
+                      <td>{item.statusOriginal}</td>
+                      <td>{item.statusNormalized}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </article>
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }
