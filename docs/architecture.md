@@ -55,3 +55,10 @@
 3. Definir qué columnas adicionales deben persistirse en `raw_import_rows` y `medicines_master`.
 4. Confirmar si la primera fila del Excel real es siempre un encabezado estable y usable para el mapeo.
 5. Validar si el criterio "primera fila válida gana" sigue siendo correcto con datos reales o si habrá una prioridad distinta documentada por negocio.
+
+## Separación de parsers
+
+- `lib/orion.ts` mantiene el parser Excel actual orientado al flujo de medicamentos/CN.
+- `lib/orion-tsv.ts` añade el parser específico del catálogo TSV de artículos Orion.
+- `lib/import/header-utils.ts` contiene utilidades genéricas de normalización/resolución de encabezados.
+- `lib/import/types.ts` declara contratos compartidos para headers normalizados, warnings, errors, parse results y `OrionCatalogItem`.

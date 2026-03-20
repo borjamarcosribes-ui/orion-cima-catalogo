@@ -1,3 +1,4 @@
+import { buildNormalizedHeaders, resolveHeaderMapping } from '@/lib/import/header-utils';
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 
@@ -67,81 +68,9 @@ export type SnapshotDiff = {
   unchanged: string[];
 };
 
-type SheetHeader = {
-  raw: string;
-  normalized: string;
-};
-
-type ResolvedMapping = {
-  codeColumnKey: string;
-  descriptionColumnKey: string;
-  normalizedHeaders: string[];
-};
-
 function normalizeCell(value: RowValue): string {
   if (value === null || value === undefined) return '';
   return String(value).trim();
-}
-
-function getSheetHeaders(worksheet: XLSX.WorkSheet): SheetHeader[] {
-  const rows = XLSX.utils.sheet_to_json<RowValue[]>(worksheet, {
-    header: 1,
-    defval: '',
-    raw: false,
-  });
-
-  const headerRow = rows[0];
-  if (!headerRow) {
-    throw new Error('La hoja seleccionada está vacía o no contiene fila de encabezados.');
-  }
-
-  const headers = headerRow
-    .map((value) => {
-      const raw = value === null || value === undefined ? '' : String(value);
-      return {
-        raw,
-        normalized: normalizeCell(raw),
-      };
-    })
-    .filter((header) => header.normalized.length > 0);
-
-  if (headers.length === 0) {
-    throw new Error('La hoja seleccionada no contiene encabezados utilizables tras normalizar espacios.');
-  }
-
-  const normalizedValues = headers.map((header) => header.normalized);
-  const duplicatedNormalizedHeaders = normalizedValues.filter(
-    (value, index) => normalizedValues.indexOf(value) !== index,
-  );
-
-  if (duplicatedNormalizedHeaders.length > 0) {
-    throw new Error(
-      `La hoja contiene encabezados ambiguos tras normalizar espacios: ${[...new Set(duplicatedNormalizedHeaders)].join(', ')}.`,
-    );
-  }
-
-  return headers;
-}
-
-function resolveMappedColumnKeys(headers: SheetHeader[], mapping: ImportMapping): ResolvedMapping {
-  const headersByNormalizedName = new Map(headers.map((header) => [header.normalized, header.raw]));
-  const normalizedCodeColumn = normalizeCell(mapping.codeColumn);
-  const normalizedDescriptionColumn = normalizeCell(mapping.descriptionColumn);
-  const missingColumns = [normalizedCodeColumn, normalizedDescriptionColumn].filter(
-    (columnName) => !headersByNormalizedName.has(columnName),
-  );
-
-  if (missingColumns.length > 0) {
-    throw new Error(
-      `El mapeo no coincide con el Excel. Faltan las columnas: ${missingColumns.join(', ')}. Encabezados detectados: ${headers.map((header) => header.normalized).join(', ') || 'ninguno'}.`,
-    );
-  }
-
-  return {
-    codeColumnKey: headersByNormalizedName.get(normalizedCodeColumn) as string,
-    descriptionColumnKey: headersByNormalizedName.get(normalizedDescriptionColumn) as string,
-    normalizedHeaders: headers.map((header) => header.normalized),
-  };
 }
 
 export function validateOrionMedicineCode(orionCode: string) {
@@ -249,8 +178,31 @@ export function parseWorkbook(buffer: ArrayBuffer, mapping: ImportMapping): Pars
     throw new Error(`La hoja "${sheetName}" no existe en el fichero importado. Hojas disponibles: ${workbook.SheetNames.join(', ') || 'ninguna'}.`);
   }
 
-  const headers = getSheetHeaders(worksheet);
-  const resolvedMapping = resolveMappedColumnKeys(headers, parsedMapping);
+  const headerRows = XLSX.utils.sheet_to_json<RowValue[]>(worksheet, {
+    header: 1,
+    defval: '',
+    raw: false,
+  });
+  const headerRow = headerRows[0];
+
+  if (!headerRow) {
+    throw new Error('La hoja seleccionada está vacía o no contiene fila de encabezados.');
+  }
+
+  let headers;
+  let resolvedMapping;
+
+  try {
+    headers = buildNormalizedHeaders(headerRow);
+    resolvedMapping = resolveHeaderMapping(headers, [parsedMapping.codeColumn, parsedMapping.descriptionColumn]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudieron resolver los encabezados del Excel.';
+    throw new Error(
+      message
+        .replace('La entrada contiene encabezados ambiguos', 'La hoja contiene encabezados ambiguos')
+        .replace('El mapeo no coincide con la entrada', 'El mapeo no coincide con el Excel'),
+    );
+  }
 
   const rawRows = XLSX.utils.sheet_to_json<RawSpreadsheetRow>(worksheet, {
     defval: '',
@@ -258,8 +210,9 @@ export function parseWorkbook(buffer: ArrayBuffer, mapping: ImportMapping): Pars
   });
 
   const rows = rawRows.map<ParsedImportRow>((row, index) => {
-    const orionCode = normalizeCell(row[resolvedMapping.codeColumnKey]);
-    const description = normalizeCell(row[resolvedMapping.descriptionColumnKey]);
+    const [codeColumnKey, descriptionColumnKey] = resolvedMapping.resolvedKeys;
+    const orionCode = normalizeCell(row[codeColumnKey]);
+    const description = normalizeCell(row[descriptionColumnKey]);
     const validation = validateOrionMedicineCode(orionCode);
 
     return {

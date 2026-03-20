@@ -27,7 +27,7 @@ export default function ImportsPage() {
         <div className="grid cols-3">
           <div className="card" style={{ boxShadow: 'none' }}>
             <strong>Formato objetivo</strong>
-            <p className="muted">El dominio ya contempla XLS y XLSX mediante la librería xlsx.</p>
+            <p className="muted">El dominio ya contempla XLS/XLSX para medicamentos y TSV para catálogo de artículos Orion.</p>
           </div>
           <div className="card" style={{ boxShadow: 'none' }}>
             <strong>Mapeo demo</strong>

@@ -14,6 +14,7 @@ Tercera iteración enfocada en robustecer el contrato del importador y el testin
 - Política explícita de deduplicación: gana la primera fila válida observada para cada CN y los duplicados se reportan como conflicto.
 - Validación explícita de existencia de hoja y columnas mapeadas en el parser.
 - Tests de comportamiento para validador, parser, deduplicación y diff.
+- Parser adicional para catálogo Orion en formato TSV con soporte de encabezados normalizados, deduplicación por artículo y conflictos.
 - Esquema relacional preparado para `import_batches`, `raw_import_rows`, `medicines_snapshot`, `medicines_master`, `cima_cache`, `supply_alerts` y `local_annotations`.
 - Documentación de arquitectura y pendientes a confirmar con el XLS real.
 
