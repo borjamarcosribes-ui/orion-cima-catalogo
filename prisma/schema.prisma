@@ -3,48 +3,42 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
-enum ImportBatchStatus {
-  pending
-  processed
-  failed
-}
-
 model ImportBatch {
-  id                 String           @id @default(cuid())
-  originalFileName   String
-  sourceSystem       String           @default("orion-logis")
-  uploadedAt         DateTime         @default(now())
-  processedAt        DateTime?
-  status             ImportBatchStatus @default(pending)
-  sheetName          String?
-  codeColumn         String
-  descriptionColumn  String
-  totalRows          Int              @default(0)
-  validRows          Int              @default(0)
-  discardedRows      Int              @default(0)
-  notes              String?
-  rawRows            RawImportRow[]
-  snapshotRows       MedicineSnapshot[]
+  id                String           @id @default(cuid())
+  originalFileName  String
+  sourceSystem      String           @default("orion-logis")
+  uploadedAt        DateTime         @default(now())
+  processedAt       DateTime?
+  status            String           @default("pending")
+  sheetName         String?
+  codeColumn        String
+  descriptionColumn String
+  totalRows         Int              @default(0)
+  validRows         Int              @default(0)
+  discardedRows     Int              @default(0)
+  notes             String?
+  rawRows           RawImportRow[]
+  snapshotRows      MedicineSnapshot[]
 
   @@map("import_batches")
 }
 
 model RawImportRow {
-  id               String      @id @default(cuid())
-  importBatchId    String
-  rowNumber        Int
-  rawPayload       Json
-  orionCode        String?
-  description      String?
-  isValidMedicine  Boolean     @default(false)
-  nationalCode     String?
-  discardReason    String?
-  createdAt        DateTime    @default(now())
-  importBatch      ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+  id              String      @id @default(cuid())
+  importBatchId   String
+  rowNumber       Int
+  rawPayload      String
+  orionCode       String?
+  description     String?
+  isValidMedicine Boolean     @default(false)
+  nationalCode    String?
+  discardReason   String?
+  createdAt       DateTime    @default(now())
+  importBatch     ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
 
   @@index([importBatchId, rowNumber])
   @@index([nationalCode])
@@ -68,14 +62,14 @@ model MedicineSnapshot {
 }
 
 model MedicineMaster {
-  nationalCode      String             @id
+  nationalCode      String            @id
   latestOrionCode   String?
   preferredLabel    String?
   firstSeenAt       DateTime?
   lastSeenAt        DateTime?
-  isCurrentlyActive Boolean            @default(true)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  isCurrentlyActive Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
   cimaCache         CimaCache?
   supplyAlerts      SupplyAlert[]
   annotations       LocalAnnotation[]
@@ -84,49 +78,85 @@ model MedicineMaster {
 }
 
 model CimaCache {
-  nationalCode             String         @id
-  officialName             String?
-  activeIngredient         String?
-  atcCode                  String?
-  laboratory               String?
-  commercializationStatus  String?
-  supplyStatus             String?
-  rawPayload               Json?
-  fetchedAt                DateTime?
-  updatedAt                DateTime       @updatedAt
-  medicineMaster           MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+  nationalCode            String         @id
+  officialName            String?
+  activeIngredient        String?
+  atcCode                 String?
+  laboratory              String?
+  commercializationStatus String?
+  supplyStatus            String?
+  rawPayload              String?
+  fetchedAt               DateTime?
+  updatedAt               DateTime       @updatedAt
+  medicineMaster          MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
 
   @@map("cima_cache")
 }
 
 model SupplyAlert {
-  id               String         @id @default(cuid())
-  nationalCode     String
-  source           String         @default("cima")
-  status           String
-  startDate        DateTime?
-  endDate          DateTime?
-  summary          String?
-  rawPayload       Json?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  medicineMaster   MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+  id             String         @id @default(cuid())
+  nationalCode   String
+  source         String         @default("cima")
+  status         String
+  startDate      DateTime?
+  endDate        DateTime?
+  summary        String?
+  rawPayload     String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  medicineMaster MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
 
   @@index([nationalCode, status])
   @@map("supply_alerts")
 }
 
 model LocalAnnotation {
-  id               String         @id @default(cuid())
-  nationalCode     String
-  noteType         String         @default("general")
-  note             String
-  severity         String?
-  createdBy        String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
-  medicineMaster   MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+  id             String         @id @default(cuid())
+  nationalCode   String
+  noteType       String         @default("general")
+  note           String
+  severity       String?
+  createdBy      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  medicineMaster MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
 
   @@index([nationalCode, noteType])
   @@map("local_annotations")
+}
+
+model TsvImport {
+  id             String          @id @default(cuid())
+  fileName       String
+  importedAt     DateTime        @default(now())
+  rowCount       Int
+  validItems     Int
+  duplicateCount Int
+  warningCount   Int
+  errorCount     Int
+  warningsJson   String
+  errorsJson     String
+  items          TsvImportItem[]
+
+  @@index([importedAt])
+  @@map("tsv_imports")
+}
+
+model TsvImportItem {
+  id               String    @id @default(cuid())
+  tsvImportId      String
+  articleCode      String
+  shortDescription String
+  longDescription  String?
+  unit             String?
+  statusOriginal   String
+  statusNormalized String
+  rowNumber        Int
+  createdAt        DateTime  @default(now())
+  tsvImport        TsvImport @relation(fields: [tsvImportId], references: [id], onDelete: Cascade)
+
+  @@unique([tsvImportId, articleCode])
+  @@index([tsvImportId])
+  @@index([articleCode])
+  @@map("tsv_import_items")
 }

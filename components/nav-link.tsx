@@ -2,8 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { Route } from 'next';
 
-export function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+type NavLinkProps = {
+  href: Route;
+  children: React.ReactNode;
+};
+
+export function NavLink({ href, children }: NavLinkProps) {
   const pathname = usePathname();
   const active = pathname === href;
 
