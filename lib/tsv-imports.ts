@@ -5,6 +5,7 @@ import type {
   SaveTsvImportPayload,
 } from '@/lib/import/persistence';
 import type { OrionCatalogItem, ParseError, ParseWarning } from '@/lib/import/types';
+import { syncWatchedMedicinesFromImport } from '@/lib/watched-medicines';
 
 function mapHistoryEntry(entry: {
   id: string;
@@ -181,6 +182,8 @@ export async function saveTsvImport(payload: SaveTsvImportPayload): Promise<Pers
         })),
       });
     }
+
+    await syncWatchedMedicinesFromImport(tx, savedImport.id, payload.items, savedImport.importedAt);
 
     return savedImport;
   });

@@ -126,9 +126,9 @@ model LocalAnnotation {
 }
 
 model TsvImport {
-  id             String          @id @default(cuid())
+  id             String           @id @default(cuid())
   fileName       String
-  importedAt     DateTime        @default(now())
+  importedAt     DateTime         @default(now())
   rowCount       Int
   validItems     Int
   duplicateCount Int
@@ -137,6 +137,7 @@ model TsvImport {
   warningsJson   String
   errorsJson     String
   items          TsvImportItem[]
+  watchedRows    WatchedMedicine[]
 
   @@index([importedAt])
   @@map("tsv_imports")
@@ -159,4 +160,81 @@ model TsvImportItem {
   @@index([tsvImportId])
   @@index([articleCode])
   @@map("tsv_import_items")
+}
+
+model WatchedMedicine {
+  id               String                  @id @default(cuid())
+  articleCode      String                  @unique
+  cn               String                  @unique
+  shortDescription String
+  statusOriginal   String
+  statusNormalized String
+  isWatched        Boolean                 @default(true)
+  firstSeenAt      DateTime                @default(now())
+  lastSeenAt       DateTime                @default(now())
+  lastImportId     String?
+  lastImport       TsvImport?              @relation(fields: [lastImportId], references: [id], onDelete: SetNull)
+  supplyStatus     SupplyStatus?
+  events           SupplyMonitoringEvent[]
+
+  @@index([cn])
+  @@index([isWatched])
+  @@map("watched_medicines")
+}
+
+model SupplyStatus {
+  id                   String          @id @default(cuid())
+  watchedMedicineId    String          @unique
+  cn                   String          @unique
+  hasActiveSupplyIssue Boolean         @default(false)
+  issueType            String?
+  startedAt            DateTime?
+  expectedEndAt        DateTime?
+  resolvedAt           DateTime?
+  observations         String?
+  rawPayload           String?
+  lastCheckedAt        DateTime
+  updatedAt            DateTime        @updatedAt
+  watchedMedicine      WatchedMedicine @relation(fields: [watchedMedicineId], references: [id], onDelete: Cascade)
+
+  @@index([hasActiveSupplyIssue])
+  @@index([lastCheckedAt])
+  @@map("supply_statuses")
+}
+
+model SupplyMonitorRun {
+  id              String                  @id @default(cuid())
+  startedAt       DateTime                @default(now())
+  finishedAt      DateTime?
+  status          String                  @default("running")
+  checkedProducts Int                     @default(0)
+  changedProducts Int                     @default(0)
+  activeIssues    Int                     @default(0)
+  newIssues       Int                     @default(0)
+  resolvedIssues  Int                     @default(0)
+  errorsJson      String?
+  source          String                  @default("manual")
+  events          SupplyMonitoringEvent[]
+
+  @@index([startedAt])
+  @@map("supply_monitor_runs")
+}
+
+model SupplyMonitoringEvent {
+  id                String           @id @default(cuid())
+  monitorRunId      String
+  watchedMedicineId String
+  cn                String
+  eventType         String
+  previousStateJson String?
+  currentStateJson  String?
+  createdAt         DateTime         @default(now())
+  monitorRun        SupplyMonitorRun @relation(fields: [monitorRunId], references: [id], onDelete: Cascade)
+  watchedMedicine   WatchedMedicine  @relation(fields: [watchedMedicineId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([cn, eventType])
+  @@index([monitorRunId])
+  @@index([watchedMedicineId])
+  @@map("supply_monitoring_events")
 }
