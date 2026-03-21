@@ -145,3 +145,7 @@ Cuando se disponga del XLS real de Orion:
 - fijar el mapeo de columnas
 - validar casos reales
 - afinar reglas de importación
+
+## Documentación de apoyo
+
+- Ver `docs/xls-real-pendientes.md` para el listado de confirmaciones que siguen abiertas hasta disponer del XLS/XLSX real.
