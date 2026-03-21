@@ -1,11 +1,11 @@
 import MonitorClient from '@/app/suministro/monitor-client';
 import { runSupplyMonitorAction } from '@/app/suministro/actions';
-import { getSupplyMonitorOverview } from '@/lib/supply-monitor';
+import { getActiveSupplyIssues, getSupplyMonitorOverview } from '@/lib/supply-monitor';
 
 export const dynamic = 'force-dynamic';
 
 export default async function SupplyPage() {
-  const overview = await getSupplyMonitorOverview();
+  const [overview, activeIssues] = await Promise.all([getSupplyMonitorOverview(), getActiveSupplyIssues()]);
 
-  return <MonitorClient overview={overview} runMonitorAction={runSupplyMonitorAction} />;
+  return <MonitorClient overview={overview} activeIssues={activeIssues} runMonitorAction={runSupplyMonitorAction} />;
 }

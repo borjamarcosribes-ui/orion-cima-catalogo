@@ -3,10 +3,11 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
-import type { SupplyMonitorOverview } from '@/lib/supply-monitor';
+import type { ActiveSupplyIssue, SupplyMonitorOverview } from '@/lib/supply-monitor';
 
 type MonitorClientProps = {
   overview: SupplyMonitorOverview;
+  activeIssues: ActiveSupplyIssue[];
   runMonitorAction: () => Promise<void>;
 };
 
@@ -21,7 +22,7 @@ function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
-export default function MonitorClient({ overview, runMonitorAction }: MonitorClientProps) {
+export default function MonitorClient({ overview, activeIssues, runMonitorAction }: MonitorClientProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -144,6 +145,45 @@ export default function MonitorClient({ overview, runMonitorAction }: MonitorCli
             <p className="muted">Sin ejecuciones todavía.</p>
           )}
         </article>
+      </section>
+
+      <section className="card">
+        <div className="section-title">
+          <h2>Roturas activas</h2>
+          <span className="badge warning">{activeIssues.length}</span>
+        </div>
+        {activeIssues.length === 0 ? (
+          <p className="muted">No hay roturas activas persistidas en este momento.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>CN</th>
+                  <th>Artículo</th>
+                  <th>Descripción</th>
+                  <th>Tipo</th>
+                  <th>Inicio</th>
+                  <th>Fin esperado</th>
+                  <th>Observaciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeIssues.map((issue) => (
+                  <tr key={`${issue.cn}-${issue.articleCode}`}>
+                    <td>{issue.cn}</td>
+                    <td>{issue.articleCode}</td>
+                    <td>{issue.shortDescription}</td>
+                    <td>{issue.issueType ?? '—'}</td>
+                    <td>{formatDateTime(issue.startedAt)}</td>
+                    <td>{formatDateTime(issue.expectedEndAt)}</td>
+                    <td>{issue.observations ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="card">

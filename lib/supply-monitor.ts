@@ -3,6 +3,16 @@ import { fetchSupplyStatusByCn, type NormalizedSupplyStatus } from '@/lib/cima-s
 
 export type SupplyEventType = 'NEW_ISSUE' | 'RESOLVED' | 'CHANGED';
 
+export type ActiveSupplyIssue = {
+  cn: string;
+  articleCode: string;
+  shortDescription: string;
+  issueType: string | null;
+  startedAt: string | null;
+  expectedEndAt: string | null;
+  observations: string | null;
+};
+
 export type SupplyMonitorOverview = {
   watchedProducts: number;
   activeIssues: number;
@@ -243,6 +253,55 @@ export async function executeSupplyMonitor() {
     });
 
     throw error;
+  }
+}
+
+export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
+  try {
+    const rows = await prisma.supplyStatus.findMany({
+      where: { hasActiveSupplyIssue: true },
+      select: {
+        cn: true,
+        issueType: true,
+        startedAt: true,
+        expectedEndAt: true,
+        observations: true,
+        watchedMedicine: {
+          select: {
+            articleCode: true,
+            shortDescription: true,
+          },
+        },
+      },
+    });
+
+    return rows
+      .map((row) => ({
+        cn: row.cn,
+        articleCode: row.watchedMedicine.articleCode,
+        shortDescription: row.watchedMedicine.shortDescription,
+        issueType: row.issueType,
+        startedAt: row.startedAt?.toISOString() ?? null,
+        expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
+        observations: row.observations,
+      }))
+      .sort((left, right) => {
+        if (left.startedAt && right.startedAt) {
+          const byStartedAt = right.startedAt.localeCompare(left.startedAt);
+          if (byStartedAt !== 0) {
+            return byStartedAt;
+          }
+        } else if (left.startedAt) {
+          return -1;
+        } else if (right.startedAt) {
+          return 1;
+        }
+
+        return left.cn.localeCompare(right.cn);
+      });
+  } catch (error) {
+    console.error('No se pudo cargar la tabla de roturas activas.', error);
+    return [];
   }
 }
 
