@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useTransition, type ChangeEvent } from 'react';
+import { useEffect, useState, useTransition, type ChangeEvent } from 'react';
+import { useRouter } from 'next/navigation';
 
 import type {
   PersistedTsvImportHistoryEntry,
+  PersistedTsvImportPreview,
   SaveTsvImportPayload,
   SaveTsvImportResult,
 } from '@/lib/import/persistence';
@@ -12,37 +14,52 @@ import { parseOrionCatalogTsv } from '@/lib/orion-tsv';
 
 type OrionCatalogParseResult = ParseResult<OrionCatalogItem>;
 
+type PreviewState = {
+  fileName: string;
+  result: OrionCatalogParseResult;
+  source: 'local' | 'persisted';
+  importId?: string;
+  importedAt?: string;
+};
+
 type ImportsClientProps = {
   initialHistory: PersistedTsvImportHistoryEntry[];
+  initialPersistedImport: PersistedTsvImportPreview | null;
   saveImportAction: (payload: SaveTsvImportPayload) => Promise<SaveTsvImportResult>;
 };
 
 type LoadState =
   | {
       status: 'idle';
-      fileName: null;
-      result: null;
+      preview: null;
       fileError: null;
     }
   | {
       status: 'ready';
-      fileName: string;
-      result: OrionCatalogParseResult;
+      preview: PreviewState;
       fileError: null;
     }
   | {
       status: 'failed';
-      fileName: string;
-      result: null;
+      preview: null;
       fileError: string;
     };
 
 const initialState: LoadState = {
   status: 'idle',
-  fileName: null,
-  result: null,
+  preview: null,
   fileError: null,
 };
+
+function buildPreviewStateFromPersistedImport(importData: PersistedTsvImportPreview): PreviewState {
+  return {
+    fileName: importData.fileName,
+    result: importData.result,
+    source: 'persisted',
+    importId: importData.id,
+    importedAt: importData.importedAt,
+  };
+}
 
 function formatRowNumbers(rowNumbers?: number[]): string {
   return rowNumbers && rowNumbers.length > 0 ? ` · filas ${rowNumbers.join(', ')}` : '';
@@ -191,21 +208,51 @@ function ImportHistory({ history }: { history: PersistedTsvImportHistoryEntry[] 
   );
 }
 
-export default function ImportsClient({ initialHistory, saveImportAction }: ImportsClientProps) {
-  const [loadState, setLoadState] = useState<LoadState>(initialState);
+export default function ImportsClient({
+  initialHistory,
+  initialPersistedImport,
+  saveImportAction,
+}: ImportsClientProps) {
+  const router = useRouter();
+  const [loadState, setLoadState] = useState<LoadState>(
+    initialPersistedImport
+      ? {
+          status: 'ready',
+          preview: buildPreviewStateFromPersistedImport(initialPersistedImport),
+          fileError: null,
+        }
+      : initialState,
+  );
   const [history, setHistory] = useState(initialHistory);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const result = loadState.result;
+  useEffect(() => {
+    if (initialPersistedImport) {
+      setLoadState({
+        status: 'ready',
+        preview: buildPreviewStateFromPersistedImport(initialPersistedImport),
+        fileError: null,
+      });
+      return;
+    }
+
+    setLoadState((currentState) =>
+      currentState.status === 'ready' && currentState.preview.source === 'local' ? currentState : initialState,
+    );
+  }, [initialPersistedImport]);
+
+  const preview = loadState.preview;
+  const result = preview?.result ?? null;
   const hasErrors = result ? result.errors.length > 0 : false;
-  const canSave = loadState.status === 'ready' && !hasErrors && loadState.result.items.length > 0 && !isPending;
-  const resultFileName = loadState.status === 'ready' ? loadState.fileName : null;
+  const canSave = preview?.source === 'local' && result !== null && !hasErrors && result.items.length > 0 && !isPending;
+  const resultFileName = preview?.fileName ?? null;
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
 
     setSaveMessage(null);
+    router.replace('/importaciones', { scroll: false });
 
     if (!file) {
       setLoadState(initialState);
@@ -215,8 +262,7 @@ export default function ImportsClient({ initialHistory, saveImportAction }: Impo
     if (!file.name.toLowerCase().endsWith('.tsv')) {
       setLoadState({
         status: 'failed',
-        fileName: file.name,
-        result: null,
+        preview: null,
         fileError: 'El fichero seleccionado no es un .tsv válido.',
       });
       return;
@@ -227,38 +273,47 @@ export default function ImportsClient({ initialHistory, saveImportAction }: Impo
       const parsed = parseOrionCatalogTsv(buffer, { sourceFile: file.name });
       setLoadState({
         status: 'ready',
-        fileName: file.name,
-        result: parsed,
+        preview: {
+          fileName: file.name,
+          result: parsed,
+          source: 'local',
+        },
         fileError: null,
       });
     } catch (error) {
       setLoadState({
         status: 'failed',
-        fileName: file.name,
-        result: null,
+        preview: null,
         fileError: error instanceof Error ? error.message : 'No se pudo leer o parsear el fichero TSV.',
       });
     }
   }
 
   function handleSaveImport() {
-    if (loadState.status !== 'ready' || loadState.result.errors.length > 0) {
+    if (loadState.status !== 'ready' || loadState.preview.source !== 'local' || loadState.preview.result.errors.length > 0) {
       return;
     }
 
     const payload: SaveTsvImportPayload = {
-      fileName: loadState.fileName,
-      rowCount: loadState.result.rowCount,
-      duplicateCount: loadState.result.duplicateCount,
-      warnings: loadState.result.warnings,
-      errors: loadState.result.errors,
-      items: loadState.result.items,
+      fileName: loadState.preview.fileName,
+      rowCount: loadState.preview.result.rowCount,
+      duplicateCount: loadState.preview.result.duplicateCount,
+      warnings: loadState.preview.result.warnings,
+      errors: loadState.preview.result.errors,
+      items: loadState.preview.result.items,
     };
 
     startTransition(async () => {
       const response = await saveImportAction(payload);
       setHistory(response.history);
-      setSaveMessage(response.ok ? `Importación guardada: ${response.savedImport.fileName}.` : response.message);
+
+      if (response.ok) {
+        setSaveMessage(`Importación guardada: ${response.savedImport.fileName}.`);
+        router.replace(`/importaciones?importId=${response.savedImport.id}`, { scroll: false });
+        return;
+      }
+
+      setSaveMessage(response.message);
     });
   }
 
@@ -280,7 +335,7 @@ export default function ImportsClient({ initialHistory, saveImportAction }: Impo
 
         <label className="file-picker" htmlFor="orion-tsv-input">
           <span className="badge primary">Seleccionar TSV</span>
-          <strong>{loadState.fileName ?? 'Ningún fichero cargado'}</strong>
+          <strong>{resultFileName ?? 'Ningún fichero cargado'}</strong>
           <span className="muted">Acepta únicamente ficheros con extensión .tsv.</span>
         </label>
         <input
@@ -296,9 +351,11 @@ export default function ImportsClient({ initialHistory, saveImportAction }: Impo
             {isPending ? 'Guardando…' : 'Guardar importación'}
           </button>
           <span className="muted">
-            {hasErrors
-              ? 'No se puede guardar mientras existan errores de parser.'
-              : 'El guardado crea cabecera e items en transacción.'}
+            {preview?.source === 'persisted'
+              ? `Vista previa cargada desde una importación guardada${preview.importedAt ? ` · ${formatImportedAt(preview.importedAt)}` : ''}.`
+              : hasErrors
+                ? 'No se puede guardar mientras existan errores de parser.'
+                : 'El guardado crea cabecera e items en transacción.'}
           </span>
         </div>
 

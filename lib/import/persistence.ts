@@ -1,4 +1,4 @@
-import type { OrionCatalogItem, ParseError, ParseWarning } from '@/lib/import/types';
+import type { OrionCatalogItem, ParseError, ParseResult, ParseWarning } from '@/lib/import/types';
 
 export type PersistedTsvImportHistoryEntry = {
   id: string;
@@ -9,6 +9,13 @@ export type PersistedTsvImportHistoryEntry = {
   duplicateCount: number;
   warningCount: number;
   errorCount: number;
+};
+
+export type PersistedTsvImportPreview = {
+  id: string;
+  fileName: string;
+  importedAt: string;
+  result: ParseResult<OrionCatalogItem>;
 };
 
 export type SaveTsvImportPayload = {
