@@ -7,6 +7,7 @@ export type ActiveSupplyIssue = {
   cn: string;
   articleCode: string;
   shortDescription: string;
+  status: 'ACTIVO' | 'LAB';
   issueType: string | null;
   startedAt: string | null;
   expectedEndAt: string | null;
@@ -277,21 +278,25 @@ export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
           select: {
             articleCode: true,
             shortDescription: true,
+            statusNormalized: true,
           },
         },
       },
     });
 
     return rows
-      .map((row) => ({
-        cn: row.cn,
-        articleCode: row.watchedMedicine.articleCode,
-        shortDescription: row.watchedMedicine.shortDescription,
-        issueType: row.issueType,
-        startedAt: row.startedAt?.toISOString() ?? null,
-        expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
-        observations: row.observations,
-      }))
+      .map(
+        (row): ActiveSupplyIssue => ({
+          cn: row.cn,
+          articleCode: row.watchedMedicine.articleCode,
+          shortDescription: row.watchedMedicine.shortDescription,
+          status: row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
+          issueType: row.issueType,
+          startedAt: row.startedAt?.toISOString() ?? null,
+          expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
+          observations: row.observations,
+        }),
+      )
       .sort((left, right) => {
         if (left.startedAt && right.startedAt) {
           const byStartedAt = right.startedAt.localeCompare(left.startedAt);

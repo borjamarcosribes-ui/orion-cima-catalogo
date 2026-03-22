@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { ActiveSupplyIssue, SupplyMonitorOverview } from '@/lib/supply-monitor';
@@ -22,10 +22,36 @@ function formatDateTime(value: string | null): string {
   }).format(new Date(value));
 }
 
+function formatDateOnly(value: string | null): string {
+  if (!value) {
+    return '—';
+  }
+
+  return new Intl.DateTimeFormat('es-ES', {
+    dateStyle: 'short',
+  }).format(new Date(value));
+}
+
 export default function MonitorClient({ overview, activeIssues, runMonitorAction }: MonitorClientProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [showActivo, setShowActivo] = useState(true);
+  const [showLab, setShowLab] = useState(true);
+
+  const filteredActiveIssues = useMemo(() => {
+    if ((!showActivo && !showLab) || (showActivo && showLab)) {
+      return activeIssues;
+    }
+
+    return activeIssues.filter((issue) => {
+      if (showActivo) {
+        return issue.status === 'ACTIVO';
+      }
+
+      return issue.status === 'LAB';
+    });
+  }, [activeIssues, showActivo, showLab]);
 
   function handleRunMonitor() {
     setMessage(null);
@@ -150,39 +176,51 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
       <section className="card">
         <div className="section-title">
           <h2>Roturas activas</h2>
-          <span className="badge warning">{activeIssues.length}</span>
+          <span className="badge warning">{filteredActiveIssues.length}</span>
         </div>
         {activeIssues.length === 0 ? (
           <p className="muted">No hay roturas activas persistidas en este momento.</p>
         ) : (
-          <div className="table-scroll">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>CN</th>
-                  <th>Artículo</th>
-                  <th>Descripción</th>
-                  <th>Tipo</th>
-                  <th>Inicio</th>
-                  <th>Fin esperado</th>
-                  <th>Observaciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeIssues.map((issue) => (
-                  <tr key={`${issue.cn}-${issue.articleCode}`}>
-                    <td>{issue.cn}</td>
-                    <td>{issue.articleCode}</td>
-                    <td>{issue.shortDescription}</td>
-                    <td>{issue.issueType ?? '—'}</td>
-                    <td>{formatDateTime(issue.startedAt)}</td>
-                    <td>{formatDateTime(issue.expectedEndAt)}</td>
-                    <td>{issue.observations ?? '—'}</td>
+          <>
+            <div className="actions-row" style={{ marginBottom: 16 }}>
+              <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+                <input checked={showActivo} onChange={(event) => setShowActivo(event.target.checked)} type="checkbox" />
+                <span>ACTIVO</span>
+              </label>
+              <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+                <input checked={showLab} onChange={(event) => setShowLab(event.target.checked)} type="checkbox" />
+                <span>LAB</span>
+              </label>
+            </div>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>CN</th>
+                    <th>Estado</th>
+                    <th>Descripción</th>
+                    <th>Tipo</th>
+                    <th>Inicio</th>
+                    <th>Fin esperado</th>
+                    <th>Observaciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredActiveIssues.map((issue) => (
+                    <tr key={`${issue.cn}-${issue.articleCode}`}>
+                      <td>{issue.cn}</td>
+                      <td>{issue.status}</td>
+                      <td>{issue.shortDescription}</td>
+                      <td>{issue.issueType ?? '—'}</td>
+                      <td>{formatDateOnly(issue.startedAt)}</td>
+                      <td>{formatDateOnly(issue.expectedEndAt)}</td>
+                      <td>{issue.observations ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
