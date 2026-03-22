@@ -2,20 +2,30 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 
 import type { OrionCatalogItem } from '@/lib/import/types';
 
-const WATCHABLE_ARTICLE_CODE_REGEX = /^[1-9]\d{5}\.CNA$/;
+const TRACKABLE_ARTICLE_CODE_REGEX = /^[1-9]\d{5}\.CNA$/;
+const CURRENTLY_WATCHABLE_STATUSES = new Set(['ACTIVO', 'LAB']);
 
 type PrismaTransaction = Prisma.TransactionClient | PrismaClient;
 
-type WatchedMedicineCandidate = {
+type TrackedMedicineCandidate = {
   articleCode: string;
   cn: string;
   shortDescription: string;
   statusOriginal: string;
   statusNormalized: string;
+  isWatched: boolean;
 };
 
-export function extractWatchableMedicine(item: OrionCatalogItem): WatchedMedicineCandidate | null {
-  if (!WATCHABLE_ARTICLE_CODE_REGEX.test(item.articleCode)) {
+function hasTrackableArticleCode(articleCode: string): boolean {
+  return TRACKABLE_ARTICLE_CODE_REGEX.test(articleCode);
+}
+
+function isCurrentlyWatchableStatus(statusNormalized: string): boolean {
+  return CURRENTLY_WATCHABLE_STATUSES.has(statusNormalized);
+}
+
+export function extractTrackedMedicine(item: OrionCatalogItem): TrackedMedicineCandidate | null {
+  if (!hasTrackableArticleCode(item.articleCode)) {
     return null;
   }
 
@@ -25,6 +35,7 @@ export function extractWatchableMedicine(item: OrionCatalogItem): WatchedMedicin
     shortDescription: item.shortDescription,
     statusOriginal: item.statusOriginal,
     statusNormalized: item.statusNormalized,
+    isWatched: isCurrentlyWatchableStatus(item.statusNormalized),
   };
 }
 
@@ -35,8 +46,10 @@ export async function syncWatchedMedicinesFromImport(
   seenAt = new Date(),
 ): Promise<number> {
   const candidates = items
-    .map(extractWatchableMedicine)
-    .filter((item): item is WatchedMedicineCandidate => item !== null);
+    .map(extractTrackedMedicine)
+    .filter((item): item is TrackedMedicineCandidate => item !== null);
+
+  const seenArticleCodes = [...new Set(candidates.map((candidate) => candidate.articleCode))];
 
   for (const candidate of candidates) {
     await tx.watchedMedicine.upsert({
@@ -46,7 +59,7 @@ export async function syncWatchedMedicinesFromImport(
         shortDescription: candidate.shortDescription,
         statusOriginal: candidate.statusOriginal,
         statusNormalized: candidate.statusNormalized,
-        isWatched: true,
+        isWatched: candidate.isWatched,
         lastSeenAt: seenAt,
         lastImportId: importId,
       },
@@ -56,7 +69,7 @@ export async function syncWatchedMedicinesFromImport(
         shortDescription: candidate.shortDescription,
         statusOriginal: candidate.statusOriginal,
         statusNormalized: candidate.statusNormalized,
-        isWatched: true,
+        isWatched: candidate.isWatched,
         firstSeenAt: seenAt,
         lastSeenAt: seenAt,
         lastImportId: importId,
@@ -64,5 +77,24 @@ export async function syncWatchedMedicinesFromImport(
     });
   }
 
-  return candidates.length;
+  if (seenArticleCodes.length > 0) {
+    await tx.watchedMedicine.updateMany({
+      where: {
+        articleCode: {
+          notIn: seenArticleCodes,
+        },
+      },
+      data: {
+        isWatched: false,
+      },
+    });
+  } else {
+    await tx.watchedMedicine.updateMany({
+      data: {
+        isWatched: false,
+      },
+    });
+  }
+
+  return candidates.filter((candidate) => candidate.isWatched).length;
 }

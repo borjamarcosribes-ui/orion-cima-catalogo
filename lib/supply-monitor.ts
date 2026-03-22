@@ -259,7 +259,14 @@ export async function executeSupplyMonitor() {
 export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
   try {
     const rows = await prisma.supplyStatus.findMany({
-      where: { hasActiveSupplyIssue: true },
+      where: {
+        hasActiveSupplyIssue: true,
+        watchedMedicine: {
+          is: {
+            isWatched: true,
+          },
+        },
+      },
       select: {
         cn: true,
         issueType: true,
@@ -309,7 +316,16 @@ export async function getSupplyMonitorOverview(): Promise<SupplyMonitorOverview>
   try {
     const [watchedProducts, activeIssues, latestRun, recentEvents] = await Promise.all([
       prisma.watchedMedicine.count({ where: { isWatched: true } }),
-      prisma.supplyStatus.count({ where: { hasActiveSupplyIssue: true } }),
+      prisma.supplyStatus.count({
+        where: {
+          hasActiveSupplyIssue: true,
+          watchedMedicine: {
+            is: {
+              isWatched: true,
+            },
+          },
+        },
+      }),
       prisma.supplyMonitorRun.findFirst({
         orderBy: { startedAt: 'desc' },
         select: {
@@ -325,6 +341,13 @@ export async function getSupplyMonitorOverview(): Promise<SupplyMonitorOverview>
         },
       }),
       prisma.supplyMonitoringEvent.findMany({
+        where: {
+          watchedMedicine: {
+            is: {
+              isWatched: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         take: 20,
         select: {
