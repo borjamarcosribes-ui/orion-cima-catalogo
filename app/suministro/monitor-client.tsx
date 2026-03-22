@@ -11,6 +11,9 @@ type MonitorClientProps = {
   runMonitorAction: () => Promise<void>;
 };
 
+type SortColumn = 'cn' | 'status' | 'shortDescription' | 'issueType' | 'startedAt' | 'expectedEndAt';
+type SortDirection = 'asc' | 'desc';
+
 function formatDateTime(value: string | null): string {
   if (!value) {
     return '—';
@@ -32,12 +35,64 @@ function formatDateOnly(value: string | null): string {
   }).format(new Date(value));
 }
 
+function compareNullableStrings(left: string | null, right: string | null, direction: SortDirection): number {
+  if (left && right) {
+    return direction === 'asc' ? left.localeCompare(right, 'es') : right.localeCompare(left, 'es');
+  }
+
+  if (left) {
+    return -1;
+  }
+
+  if (right) {
+    return 1;
+  }
+
+  return 0;
+}
+
+function compareActiveIssues(
+  left: ActiveSupplyIssue,
+  right: ActiveSupplyIssue,
+  column: SortColumn,
+  direction: SortDirection,
+): number {
+  const primaryComparison = (() => {
+    switch (column) {
+      case 'cn':
+        return direction === 'asc' ? left.cn.localeCompare(right.cn) : right.cn.localeCompare(left.cn);
+      case 'status':
+        return direction === 'asc'
+          ? left.status.localeCompare(right.status, 'es')
+          : right.status.localeCompare(left.status, 'es');
+      case 'shortDescription':
+        return direction === 'asc'
+          ? left.shortDescription.localeCompare(right.shortDescription, 'es')
+          : right.shortDescription.localeCompare(left.shortDescription, 'es');
+      case 'issueType':
+        return compareNullableStrings(left.issueType, right.issueType, direction);
+      case 'startedAt':
+        return compareNullableStrings(left.startedAt, right.startedAt, direction);
+      case 'expectedEndAt':
+        return compareNullableStrings(left.expectedEndAt, right.expectedEndAt, direction);
+    }
+  })();
+
+  if (primaryComparison !== 0) {
+    return primaryComparison;
+  }
+
+  return left.cn.localeCompare(right.cn);
+}
+
 export default function MonitorClient({ overview, activeIssues, runMonitorAction }: MonitorClientProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [showActivo, setShowActivo] = useState(true);
   const [showLab, setShowLab] = useState(true);
+  const [sortColumn, setSortColumn] = useState<SortColumn>('startedAt');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   const filteredActiveIssues = useMemo(() => {
     if ((!showActivo && !showLab) || (showActivo && showLab)) {
@@ -52,6 +107,29 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
       return issue.status === 'LAB';
     });
   }, [activeIssues, showActivo, showLab]);
+
+  const sortedActiveIssues = useMemo(
+    () => [...filteredActiveIssues].sort((left, right) => compareActiveIssues(left, right, sortColumn, sortDirection)),
+    [filteredActiveIssues, sortColumn, sortDirection],
+  );
+
+  function handleSort(column: SortColumn) {
+    if (column === sortColumn) {
+      setSortDirection((currentDirection) => (currentDirection === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setSortColumn(column);
+    setSortDirection(column === 'startedAt' || column === 'expectedEndAt' ? 'desc' : 'asc');
+  }
+
+  function getSortIndicator(column: SortColumn): string {
+    if (column !== sortColumn) {
+      return '';
+    }
+
+    return sortDirection === 'asc' ? ' ↑' : ' ↓';
+  }
 
   function handleRunMonitor() {
     setMessage(null);
@@ -176,7 +254,7 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
       <section className="card">
         <div className="section-title">
           <h2>Roturas activas</h2>
-          <span className="badge warning">{filteredActiveIssues.length}</span>
+          <span className="badge warning">{sortedActiveIssues.length}</span>
         </div>
         {activeIssues.length === 0 ? (
           <p className="muted">No hay roturas activas persistidas en este momento.</p>
@@ -196,17 +274,35 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
               <table className="table">
                 <thead>
                   <tr>
-                    <th>CN</th>
-                    <th>Estado</th>
-                    <th>Descripción</th>
-                    <th>Tipo</th>
-                    <th>Inicio</th>
-                    <th>Fin esperado</th>
+                    <th>
+                      <button onClick={() => handleSort('cn')} type="button">CN{getSortIndicator('cn')}</button>
+                    </th>
+                    <th>
+                      <button onClick={() => handleSort('status')} type="button">
+                        Estado{getSortIndicator('status')}
+                      </button>
+                    </th>
+                    <th>
+                      <button onClick={() => handleSort('shortDescription')} type="button">
+                        Descripción{getSortIndicator('shortDescription')}
+                      </button>
+                    </th>
+                    <th>
+                      <button onClick={() => handleSort('issueType')} type="button">Tipo{getSortIndicator('issueType')}</button>
+                    </th>
+                    <th>
+                      <button onClick={() => handleSort('startedAt')} type="button">Inicio{getSortIndicator('startedAt')}</button>
+                    </th>
+                    <th>
+                      <button onClick={() => handleSort('expectedEndAt')} type="button">
+                        Fin esperado{getSortIndicator('expectedEndAt')}
+                      </button>
+                    </th>
                     <th>Observaciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredActiveIssues.map((issue) => (
+                  {sortedActiveIssues.map((issue) => (
                     <tr key={`${issue.cn}-${issue.articleCode}`}>
                       <td>{issue.cn}</td>
                       <td>{issue.status}</td>
