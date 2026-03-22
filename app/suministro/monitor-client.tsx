@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState, useTransition, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { ActiveSupplyIssue, SupplyMonitorOverview } from '@/lib/supply-monitor';
@@ -13,6 +13,20 @@ type MonitorClientProps = {
 
 type SortColumn = 'cn' | 'status' | 'shortDescription' | 'issueType' | 'startedAt' | 'expectedEndAt';
 type SortDirection = 'asc' | 'desc';
+
+const sortableHeaderButtonStyle: CSSProperties = {
+  WebkitAppearance: 'none',
+  appearance: 'none',
+  background: 'transparent',
+  border: 'none',
+  color: 'inherit',
+  cursor: 'pointer',
+  font: 'inherit',
+  fontWeight: 'inherit',
+  margin: 0,
+  padding: 0,
+  textAlign: 'left',
+};
 
 function formatDateTime(value: string | null): string {
   if (!value) {
@@ -51,6 +65,30 @@ function compareNullableStrings(left: string | null, right: string | null, direc
   return 0;
 }
 
+function parseNumericSortValue(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  if (trimmedValue.length === 0) {
+    return null;
+  }
+
+  return /^\d+$/.test(trimmedValue) ? Number(trimmedValue) : null;
+}
+
+function compareIssueType(left: string | null, right: string | null, direction: SortDirection): number {
+  const leftNumeric = parseNumericSortValue(left);
+  const rightNumeric = parseNumericSortValue(right);
+
+  if (leftNumeric !== null && rightNumeric !== null) {
+    return direction === 'asc' ? leftNumeric - rightNumeric : rightNumeric - leftNumeric;
+  }
+
+  return compareNullableStrings(left, right, direction);
+}
+
 function compareActiveIssues(
   left: ActiveSupplyIssue,
   right: ActiveSupplyIssue,
@@ -70,7 +108,7 @@ function compareActiveIssues(
           ? left.shortDescription.localeCompare(right.shortDescription, 'es')
           : right.shortDescription.localeCompare(left.shortDescription, 'es');
       case 'issueType':
-        return compareNullableStrings(left.issueType, right.issueType, direction);
+        return compareIssueType(left.issueType, right.issueType, direction);
       case 'startedAt':
         return compareNullableStrings(left.startedAt, right.startedAt, direction);
       case 'expectedEndAt':
@@ -275,26 +313,32 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
                 <thead>
                   <tr>
                     <th>
-                      <button onClick={() => handleSort('cn')} type="button">CN{getSortIndicator('cn')}</button>
+                      <button onClick={() => handleSort('cn')} style={sortableHeaderButtonStyle} type="button">
+                        CN{getSortIndicator('cn')}
+                      </button>
                     </th>
                     <th>
-                      <button onClick={() => handleSort('status')} type="button">
+                      <button onClick={() => handleSort('status')} style={sortableHeaderButtonStyle} type="button">
                         Estado{getSortIndicator('status')}
                       </button>
                     </th>
                     <th>
-                      <button onClick={() => handleSort('shortDescription')} type="button">
+                      <button onClick={() => handleSort('shortDescription')} style={sortableHeaderButtonStyle} type="button">
                         Descripción{getSortIndicator('shortDescription')}
                       </button>
                     </th>
                     <th>
-                      <button onClick={() => handleSort('issueType')} type="button">Tipo{getSortIndicator('issueType')}</button>
+                      <button onClick={() => handleSort('issueType')} style={sortableHeaderButtonStyle} type="button">
+                        Tipo{getSortIndicator('issueType')}
+                      </button>
                     </th>
                     <th>
-                      <button onClick={() => handleSort('startedAt')} type="button">Inicio{getSortIndicator('startedAt')}</button>
+                      <button onClick={() => handleSort('startedAt')} style={sortableHeaderButtonStyle} type="button">
+                        Inicio{getSortIndicator('startedAt')}
+                      </button>
                     </th>
                     <th>
-                      <button onClick={() => handleSort('expectedEndAt')} type="button">
+                      <button onClick={() => handleSort('expectedEndAt')} style={sortableHeaderButtonStyle} type="button">
                         Fin esperado{getSortIndicator('expectedEndAt')}
                       </button>
                     </th>
