@@ -238,3 +238,19 @@ model SupplyMonitoringEvent {
   @@index([watchedMedicineId])
   @@map("supply_monitoring_events")
 }
+
+model NomenclatorProduct {
+  cn                      String   @id
+  codDcp                  String
+  presentation            String
+  officialName            String?
+  commercializationStatus String
+  rawPayload              String?
+  importedAt              DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([codDcp])
+  @@index([commercializationStatus])
+  @@index([codDcp, commercializationStatus])
+  @@map("nomenclator_products")
+}
