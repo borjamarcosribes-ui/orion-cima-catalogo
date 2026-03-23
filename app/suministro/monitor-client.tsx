@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useState, useTransition, type CSSProperties } from 'react';
+import { Fragment, useMemo, useState, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type {
@@ -8,17 +8,22 @@ import type {
   MedicineAlternative,
   MedicineAlternativesResult,
 } from '@/lib/medicine-alternatives';
+import type { NomenclatorJobRunOverview } from '@/lib/nomenclator-update';
+import type { RunNomenclatorUpdateActionResult } from '@/app/suministro/actions';
 import type { ActiveSupplyIssue, SupplyMonitorOverview } from '@/lib/supply-monitor';
 
 type MonitorClientProps = {
   overview: SupplyMonitorOverview;
   activeIssues: ActiveSupplyIssue[];
   runMonitorAction: () => Promise<void>;
+  runNomenclatorUpdateAction: () => Promise<RunNomenclatorUpdateActionResult>;
   getMedicineAlternativesAction: (input: { cn: string }) => Promise<GetMedicineAlternativesOutput>;
+  latestNomenclatorRun: NomenclatorJobRunOverview | null;
 };
 
 type SortColumn = 'cn' | 'status' | 'shortDescription' | 'issueType' | 'startedAt' | 'expectedEndAt';
 type SortDirection = 'asc' | 'desc';
+type PendingAction = 'monitor' | 'nomenclator' | null;
 
 const sortableHeaderButtonStyle: CSSProperties = {
   WebkitAppearance: 'none',
@@ -159,11 +164,14 @@ export default function MonitorClient({
   overview,
   activeIssues,
   runMonitorAction,
+  runNomenclatorUpdateAction,
   getMedicineAlternativesAction,
+  latestNomenclatorRun,
 }: MonitorClientProps) {
   const router = useRouter();
-  const [message, setMessage] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [monitorMessage, setMonitorMessage] = useState<string | null>(null);
+  const [nomenclatorMessage, setNomenclatorMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [showActivo, setShowActivo] = useState(true);
   const [showLab, setShowLab] = useState(true);
   const [sortColumn, setSortColumn] = useState<SortColumn>('startedAt');
@@ -211,18 +219,49 @@ export default function MonitorClient({
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   }
 
-  function handleRunMonitor() {
-    setMessage(null);
+  async function handleRunMonitor() {
+    setMonitorMessage(null);
+    setPendingAction('monitor');
 
-    startTransition(async () => {
-      try {
-        await runMonitorAction();
-        setMessage('Monitor AEMPS ejecutado correctamente.');
-        router.refresh();
-      } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'No se pudo ejecutar el monitor AEMPS.');
+    try {
+      await runMonitorAction();
+      setMonitorMessage('Monitor AEMPS ejecutado correctamente.');
+      router.refresh();
+    } catch (error) {
+      setMonitorMessage(error instanceof Error ? error.message : 'No se pudo ejecutar el monitor AEMPS.');
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleRunNomenclatorUpdate() {
+    setNomenclatorMessage(null);
+    setPendingAction('nomenclator');
+
+    try {
+      const response = await runNomenclatorUpdateAction();
+
+      switch (response.result.status) {
+        case 'completed':
+          setNomenclatorMessage('Nomenclátor actualizado correctamente.');
+          break;
+        case 'completed_with_errors':
+          setNomenclatorMessage('Actualización completada con avisos. Revisa el último resumen.');
+          break;
+        case 'skipped_locked':
+          setNomenclatorMessage('Ya hay una actualización de Nomenclátor en curso.');
+          break;
+        default:
+          setNomenclatorMessage('No se pudo actualizar el Nomenclátor.');
+          break;
       }
-    });
+
+      router.refresh();
+    } catch (error) {
+      setNomenclatorMessage(error instanceof Error ? error.message : 'No se pudo actualizar el Nomenclátor.');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   function getVisibleAlternatives(cn: string): MedicineAlternative[] {
@@ -236,7 +275,7 @@ export default function MonitorClient({
       : panelData.alternatives.filter((item) => item.commercializationStatus === 'COMERCIALIZADO');
   }
 
-  function handleToggleAlternatives(issue: ActiveSupplyIssue) {
+  async function handleToggleAlternatives(issue: ActiveSupplyIssue) {
     if (expandedCn === issue.cn) {
       setExpandedCn(null);
       return;
@@ -256,51 +295,109 @@ export default function MonitorClient({
       return next;
     });
 
-    startTransition(async () => {
-      try {
-        const response = await getMedicineAlternativesAction({ cn: issue.cn });
+    try {
+      const response = await getMedicineAlternativesAction({ cn: issue.cn });
 
-        if (!response.ok) {
-          setAlternativesErrorByCn((current) => ({ ...current, [issue.cn]: response.message }));
-          return;
-        }
-
-        setAlternativesByCn((current) => ({ ...current, [issue.cn]: response.data }));
-      } catch (error) {
-        setAlternativesErrorByCn((current) => ({
-          ...current,
-          [issue.cn]: error instanceof Error ? error.message : 'No se pudieron cargar las alternativas.',
-        }));
-      } finally {
-        setLoadingAlternativesCn((current) => (current === issue.cn ? null : current));
+      if (!response.ok) {
+        setAlternativesErrorByCn((current) => ({ ...current, [issue.cn]: response.message }));
+        return;
       }
-    });
+
+      setAlternativesByCn((current) => ({ ...current, [issue.cn]: response.data }));
+    } catch (error) {
+      setAlternativesErrorByCn((current) => ({
+        ...current,
+        [issue.cn]: error instanceof Error ? error.message : 'No se pudieron cargar las alternativas.',
+      }));
+    } finally {
+      setLoadingAlternativesCn((current) => (current === issue.cn ? null : current));
+    }
   }
 
   return (
     <div className="grid" style={{ gap: 24 }}>
-      <section className="card">
-        <div className="section-title">
-          <div>
-            <div className="badge primary">Suministro</div>
-            <h1>Monitor AEMPS / CIMA</h1>
+      <section className="grid cols-2">
+        <article className="card">
+          <div className="section-title">
+            <div>
+              <div className="badge primary">Suministro</div>
+              <h1>Monitor AEMPS / CIMA</h1>
+            </div>
+            <span className="badge success">Consulta manual por CN</span>
           </div>
-          <span className="badge success">Consulta manual por CN</span>
-        </div>
-        <p className="muted">
-          Esta vista monitoriza los medicamentos vigilables ya conocidos por la app. El TSV solo refresca el universo de
-          productos vigilados; la vigilancia sigue funcionando sobre los CN ya guardados.
-        </p>
-        <div className="actions-row">
-          <button className="primary-button" disabled={isPending} onClick={handleRunMonitor} type="button">
-            {isPending ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
-          </button>
-          <span className="muted">
-            El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
-            abortar todo el run.
-          </span>
-        </div>
-        {message ? <p className="muted">{message}</p> : null}
+          <p className="muted">
+            Esta vista monitoriza los medicamentos vigilables ya conocidos por la app. El TSV solo refresca el universo de
+            productos vigilados; la vigilancia sigue funcionando sobre los CN ya guardados.
+          </p>
+          <div className="actions-row">
+            <button
+              className="primary-button"
+              disabled={pendingAction === 'monitor'}
+              aria-busy={pendingAction === 'monitor'}
+              onClick={handleRunMonitor}
+              type="button"
+            >
+              {pendingAction === 'monitor' ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
+            </button>
+            <span className="muted">
+              El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
+              abortar todo el run.
+            </span>
+          </div>
+          {monitorMessage ? <p className="muted">{monitorMessage}</p> : null}
+        </article>
+
+        <article className="card">
+          <div className="section-title">
+            <div>
+              <div className="badge primary">Nomenclátor</div>
+              <h1>Nomenclátor de prescripción</h1>
+            </div>
+            <span className="badge success">Actualización manual</span>
+          </div>
+          <p className="muted">
+            Actualiza la base local de especialidades equivalentes desde el fichero de Nomenclátor disponible en disco.
+          </p>
+          <div className="actions-row">
+            <button
+              className="primary-button"
+              disabled={pendingAction === 'nomenclator'}
+              aria-busy={pendingAction === 'nomenclator'}
+              onClick={handleRunNomenclatorUpdate}
+              type="button"
+            >
+              {pendingAction === 'nomenclator' ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
+            </button>
+            <span className="muted">Importa el XML local configurado y refresca el resumen operativo al terminar.</span>
+          </div>
+          {nomenclatorMessage ? <p className="muted">{nomenclatorMessage}</p> : null}
+          {latestNomenclatorRun ? (
+            <ul className="list compact-list" style={{ marginTop: 18 }}>
+              <li>
+                <strong>Última ejecución</strong>
+                <div className="muted">{formatDateTime(latestNomenclatorRun.finishedAt ?? latestNomenclatorRun.startedAt)}</div>
+              </li>
+              <li>
+                <strong>Estado</strong>
+                <div className="muted">{latestNomenclatorRun.status}</div>
+              </li>
+              <li>
+                <strong>Productos procesados</strong>
+                <div className="muted">{latestNomenclatorRun.processed ?? '—'}</div>
+              </li>
+              <li>
+                <strong>Insertados / actualizados</strong>
+                <div className="muted">{latestNomenclatorRun.insertedOrUpdated ?? '—'}</div>
+              </li>
+              <li>
+                <strong>Descartados</strong>
+                <div className="muted">{latestNomenclatorRun.discarded ?? '—'}</div>
+              </li>
+            </ul>
+          ) : (
+            <p className="muted" style={{ marginTop: 18 }}>Todavía no se ha ejecutado la actualización del Nomenclátor.</p>
+          )}
+        </article>
       </section>
 
       <section className="grid cols-3">
@@ -472,8 +569,7 @@ export default function MonitorClient({
                                   <div>
                                     <h3 style={{ marginBottom: 8 }}>Alternativas equivalentes</h3>
                                     <div className="muted">
-                                      Cruce a través de nomenclator de especialidades equivalentes (mismo principio activo,
-                                      misma dosis y misma forma farmacéutica).
+                                      Cruce a través de nomenclator de especialidades equivalentes (mismo principio activo, misma dosis y misma forma farmacéutica).
                                     </div>
                                   </div>
                                   <span className="badge primary">{issue.cn}</span>
@@ -485,38 +581,14 @@ export default function MonitorClient({
                                 {panelData ? (
                                   <div className="grid" style={{ gap: 16 }}>
                                     <div className="grid cols-2" style={{ gap: 12 }}>
-                                      <div>
-                                        <strong>CN origen</strong>
-                                        <div className="muted">{panelData.sourceMedicine.cn}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Estado local</strong>
-                                        <div className="muted">{panelData.sourceMedicine.localStatus}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Descripción</strong>
-                                        <div className="muted">{panelData.sourceMedicine.shortDescription}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Tipo</strong>
-                                        <div className="muted">{panelData.sourceMedicine.issueType ?? '—'}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Inicio</strong>
-                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.startedAt)}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Fin esperado</strong>
-                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.expectedEndAt)}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Observaciones</strong>
-                                        <div className="muted">{panelData.sourceMedicine.observations ?? '—'}</div>
-                                      </div>
-                                      <div>
-                                        <strong>codDcp</strong>
-                                        <div className="muted">{panelData.sourceMedicine.codDcp ?? '—'}</div>
-                                      </div>
+                                      <div><strong>CN origen</strong><div className="muted">{panelData.sourceMedicine.cn}</div></div>
+                                      <div><strong>Estado local</strong><div className="muted">{panelData.sourceMedicine.localStatus}</div></div>
+                                      <div><strong>Descripción</strong><div className="muted">{panelData.sourceMedicine.shortDescription}</div></div>
+                                      <div><strong>Tipo</strong><div className="muted">{panelData.sourceMedicine.issueType ?? '—'}</div></div>
+                                      <div><strong>Inicio</strong><div className="muted">{formatDateOnly(panelData.sourceMedicine.startedAt)}</div></div>
+                                      <div><strong>Fin esperado</strong><div className="muted">{formatDateOnly(panelData.sourceMedicine.expectedEndAt)}</div></div>
+                                      <div><strong>Observaciones</strong><div className="muted">{panelData.sourceMedicine.observations ?? '—'}</div></div>
+                                      <div><strong>codDcp</strong><div className="muted">{panelData.sourceMedicine.codDcp ?? '—'}</div></div>
                                     </div>
 
                                     <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
@@ -557,11 +629,7 @@ export default function MonitorClient({
                                                 <td>{formatDateOnly(alternative.supplyExpectedEndAt)}</td>
                                                 <td>{alternative.supplyObservations ?? '—'}</td>
                                                 <td>{getHospitalPresenceLabel(alternative.hospitalPresenceStatus)}</td>
-                                                <td>
-                                                  {alternative.hospitalPresenceStatus === 'NO_PRESENTE'
-                                                    ? '—'
-                                                    : alternative.hospitalStatusNormalized ?? '—'}
-                                                </td>
+                                                <td>{alternative.hospitalPresenceStatus === 'NO_PRESENTE' ? '—' : alternative.hospitalStatusNormalized ?? '—'}</td>
                                               </tr>
                                             ))}
                                           </tbody>
