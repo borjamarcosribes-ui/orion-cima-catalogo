@@ -1,15 +1,15 @@
 'use client';
 
-import { Fragment, useMemo, useState, type CSSProperties } from 'react';
+import { Fragment, useMemo, useState, useTransition, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 
+import type { RunNomenclatorUpdateActionResult } from '@/app/suministro/actions';
 import type {
   GetMedicineAlternativesOutput,
   MedicineAlternative,
   MedicineAlternativesResult,
 } from '@/lib/medicine-alternatives';
 import type { NomenclatorJobRunOverview } from '@/lib/nomenclator-update';
-import type { RunNomenclatorUpdateActionResult } from '@/app/suministro/actions';
 import type { ActiveSupplyIssue, SupplyMonitorOverview } from '@/lib/supply-monitor';
 
 type MonitorClientProps = {
@@ -172,6 +172,7 @@ export default function MonitorClient({
   const [monitorMessage, setMonitorMessage] = useState<string | null>(null);
   const [nomenclatorMessage, setNomenclatorMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [isPending, startTransition] = useTransition();
   const [showActivo, setShowActivo] = useState(true);
   const [showLab, setShowLab] = useState(true);
   const [sortColumn, setSortColumn] = useState<SortColumn>('startedAt');
@@ -181,6 +182,9 @@ export default function MonitorClient({
   const [alternativesByCn, setAlternativesByCn] = useState<Record<string, MedicineAlternativesResult>>({});
   const [alternativesErrorByCn, setAlternativesErrorByCn] = useState<Record<string, string>>({});
   const [loadingAlternativesCn, setLoadingAlternativesCn] = useState<string | null>(null);
+
+  const isMonitorRunning = isPending && pendingAction === 'monitor';
+  const isNomenclatorRunning = isPending && pendingAction === 'nomenclator';
 
   const filteredActiveIssues = useMemo(() => {
     if ((!showActivo && !showLab) || (showActivo && showLab)) {
@@ -219,49 +223,53 @@ export default function MonitorClient({
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   }
 
-  async function handleRunMonitor() {
+  function handleRunMonitor() {
     setMonitorMessage(null);
-    setPendingAction('monitor');
 
-    try {
-      await runMonitorAction();
-      setMonitorMessage('Monitor AEMPS ejecutado correctamente.');
-      router.refresh();
-    } catch (error) {
-      setMonitorMessage(error instanceof Error ? error.message : 'No se pudo ejecutar el monitor AEMPS.');
-    } finally {
-      setPendingAction(null);
-    }
+    startTransition(async () => {
+      try {
+        setPendingAction('monitor');
+        await runMonitorAction();
+        setMonitorMessage('Monitor AEMPS ejecutado correctamente.');
+        router.refresh();
+      } catch (error) {
+        setMonitorMessage(error instanceof Error ? error.message : 'No se pudo ejecutar el monitor AEMPS.');
+      } finally {
+        setPendingAction((current) => (current === 'monitor' ? null : current));
+      }
+    });
   }
 
-  async function handleRunNomenclatorUpdate() {
+  function handleRunNomenclatorUpdate() {
     setNomenclatorMessage(null);
-    setPendingAction('nomenclator');
 
-    try {
-      const response = await runNomenclatorUpdateAction();
+    startTransition(async () => {
+      try {
+        setPendingAction('nomenclator');
+        const response = await runNomenclatorUpdateAction();
 
-      switch (response.result.status) {
-        case 'completed':
-          setNomenclatorMessage('Nomenclátor actualizado correctamente.');
-          break;
-        case 'completed_with_errors':
-          setNomenclatorMessage('Actualización completada con avisos. Revisa el último resumen.');
-          break;
-        case 'skipped_locked':
-          setNomenclatorMessage('Ya hay una actualización de Nomenclátor en curso.');
-          break;
-        default:
-          setNomenclatorMessage('No se pudo actualizar el Nomenclátor.');
-          break;
+        switch (response.result.status) {
+          case 'completed':
+            setNomenclatorMessage('Nomenclátor actualizado correctamente.');
+            break;
+          case 'completed_with_errors':
+            setNomenclatorMessage('Actualización completada con avisos. Revisa el último resumen.');
+            break;
+          case 'skipped_locked':
+            setNomenclatorMessage('Ya hay una actualización de Nomenclátor en curso.');
+            break;
+          default:
+            setNomenclatorMessage('No se pudo actualizar el Nomenclátor.');
+            break;
+        }
+
+        router.refresh();
+      } catch (error) {
+        setNomenclatorMessage(error instanceof Error ? error.message : 'No se pudo actualizar el Nomenclátor.');
+      } finally {
+        setPendingAction((current) => (current === 'nomenclator' ? null : current));
       }
-
-      router.refresh();
-    } catch (error) {
-      setNomenclatorMessage(error instanceof Error ? error.message : 'No se pudo actualizar el Nomenclátor.');
-    } finally {
-      setPendingAction(null);
-    }
+    });
   }
 
   function getVisibleAlternatives(cn: string): MedicineAlternative[] {
@@ -275,7 +283,7 @@ export default function MonitorClient({
       : panelData.alternatives.filter((item) => item.commercializationStatus === 'COMERCIALIZADO');
   }
 
-  async function handleToggleAlternatives(issue: ActiveSupplyIssue) {
+  function handleToggleAlternatives(issue: ActiveSupplyIssue) {
     if (expandedCn === issue.cn) {
       setExpandedCn(null);
       return;
@@ -295,23 +303,25 @@ export default function MonitorClient({
       return next;
     });
 
-    try {
-      const response = await getMedicineAlternativesAction({ cn: issue.cn });
+    startTransition(async () => {
+      try {
+        const response = await getMedicineAlternativesAction({ cn: issue.cn });
 
-      if (!response.ok) {
-        setAlternativesErrorByCn((current) => ({ ...current, [issue.cn]: response.message }));
-        return;
+        if (!response.ok) {
+          setAlternativesErrorByCn((current) => ({ ...current, [issue.cn]: response.message }));
+          return;
+        }
+
+        setAlternativesByCn((current) => ({ ...current, [issue.cn]: response.data }));
+      } catch (error) {
+        setAlternativesErrorByCn((current) => ({
+          ...current,
+          [issue.cn]: error instanceof Error ? error.message : 'No se pudieron cargar las alternativas.',
+        }));
+      } finally {
+        setLoadingAlternativesCn((current) => (current === issue.cn ? null : current));
       }
-
-      setAlternativesByCn((current) => ({ ...current, [issue.cn]: response.data }));
-    } catch (error) {
-      setAlternativesErrorByCn((current) => ({
-        ...current,
-        [issue.cn]: error instanceof Error ? error.message : 'No se pudieron cargar las alternativas.',
-      }));
-    } finally {
-      setLoadingAlternativesCn((current) => (current === issue.cn ? null : current));
-    }
+    });
   }
 
   return (
@@ -332,12 +342,12 @@ export default function MonitorClient({
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={pendingAction === 'monitor'}
-              aria-busy={pendingAction === 'monitor'}
+              disabled={isMonitorRunning}
               onClick={handleRunMonitor}
+              style={isMonitorRunning ? { opacity: 0.65, filter: 'saturate(0.8)', boxShadow: 'inset 0 0 0 9999px rgba(255,255,255,0.08)' } : undefined}
               type="button"
             >
-              {pendingAction === 'monitor' ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
+              {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
             </button>
             <span className="muted">
               El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
@@ -345,6 +355,37 @@ export default function MonitorClient({
             </span>
           </div>
           {monitorMessage ? <p className="muted">{monitorMessage}</p> : null}
+
+          {overview.latestRun ? (
+            <div className="grid cols-2" style={{ gap: 12, marginTop: 18 }}>
+              <div className="list compact-list">
+                <li>
+                  <strong>Inicio</strong>
+                  <div className="muted">{formatDateTime(overview.latestRun.startedAt)}</div>
+                </li>
+              </div>
+              <div className="list compact-list">
+                <li>
+                  <strong>Fin</strong>
+                  <div className="muted">{formatDateTime(overview.latestRun.finishedAt)}</div>
+                </li>
+              </div>
+              <div className="list compact-list">
+                <li>
+                  <strong>Estado</strong>
+                  <div className="muted">{overview.latestRun.status}</div>
+                </li>
+              </div>
+              <div className="list compact-list">
+                <li>
+                  <strong>Roturas activas</strong>
+                  <div className="muted">{overview.latestRun.activeIssues}</div>
+                </li>
+              </div>
+            </div>
+          ) : (
+            <p className="muted" style={{ marginTop: 18 }}>Todavía no se ha ejecutado el monitor.</p>
+          )}
         </article>
 
         <article className="card">
@@ -361,12 +402,12 @@ export default function MonitorClient({
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={pendingAction === 'nomenclator'}
-              aria-busy={pendingAction === 'nomenclator'}
+              disabled={isNomenclatorRunning}
               onClick={handleRunNomenclatorUpdate}
+              style={isNomenclatorRunning ? { opacity: 0.65, filter: 'saturate(0.8)', boxShadow: 'inset 0 0 0 9999px rgba(255,255,255,0.08)' } : undefined}
               type="button"
             >
-              {pendingAction === 'nomenclator' ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
+              {isNomenclatorRunning ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
             </button>
             <span className="muted">Importa el XML local configurado y refresca el resumen operativo al terminar.</span>
           </div>
@@ -420,64 +461,47 @@ export default function MonitorClient({
         </article>
       </section>
 
-      <section className="grid cols-2">
-        <article className="card">
-          <div className="section-title">
-            <h2>Resumen del último run</h2>
-            <span className="badge primary">{overview.latestRun?.status ?? 'sin runs'}</span>
-          </div>
-          {overview.latestRun ? (
-            <ul className="list compact-list">
+      <section className="card">
+        <div className="section-title">
+          <h2>Resumen del último run</h2>
+          <span className="badge primary">{overview.latestRun?.status ?? 'sin runs'}</span>
+        </div>
+        {overview.latestRun ? (
+          <div
+            className="grid"
+            style={{
+              gap: 16,
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            }}
+          >
+            <div className="list compact-list">
               <li>
                 <strong>Nuevas roturas</strong>
                 <div className="muted">{overview.newIssues}</div>
               </li>
+            </div>
+            <div className="list compact-list">
               <li>
                 <strong>Roturas resueltas</strong>
                 <div className="muted">{overview.resolvedIssues}</div>
               </li>
+            </div>
+            <div className="list compact-list">
               <li>
                 <strong>Productos revisados</strong>
                 <div className="muted">{overview.latestRun.checkedProducts}</div>
               </li>
+            </div>
+            <div className="list compact-list">
               <li>
                 <strong>Cambios detectados</strong>
                 <div className="muted">{overview.latestRun.changedProducts}</div>
               </li>
-            </ul>
-          ) : (
-            <p className="muted">Todavía no se ha ejecutado el monitor.</p>
-          )}
-        </article>
-
-        <article className="card">
-          <div className="section-title">
-            <h2>Última ejecución</h2>
-            <span className="badge warning">manual</span>
+            </div>
           </div>
-          {overview.latestRun ? (
-            <ul className="list compact-list">
-              <li>
-                <strong>Inicio</strong>
-                <div className="muted">{formatDateTime(overview.latestRun.startedAt)}</div>
-              </li>
-              <li>
-                <strong>Fin</strong>
-                <div className="muted">{formatDateTime(overview.latestRun.finishedAt)}</div>
-              </li>
-              <li>
-                <strong>Estado</strong>
-                <div className="muted">{overview.latestRun.status}</div>
-              </li>
-              <li>
-                <strong>Roturas activas</strong>
-                <div className="muted">{overview.latestRun.activeIssues}</div>
-              </li>
-            </ul>
-          ) : (
-            <p className="muted">Sin ejecuciones todavía.</p>
-          )}
-        </article>
+        ) : (
+          <p className="muted">Todavía no se ha ejecutado el monitor.</p>
+        )}
       </section>
 
       <section className="card">
@@ -581,14 +605,38 @@ export default function MonitorClient({
                                 {panelData ? (
                                   <div className="grid" style={{ gap: 16 }}>
                                     <div className="grid cols-2" style={{ gap: 12 }}>
-                                      <div><strong>CN origen</strong><div className="muted">{panelData.sourceMedicine.cn}</div></div>
-                                      <div><strong>Estado local</strong><div className="muted">{panelData.sourceMedicine.localStatus}</div></div>
-                                      <div><strong>Descripción</strong><div className="muted">{panelData.sourceMedicine.shortDescription}</div></div>
-                                      <div><strong>Tipo</strong><div className="muted">{panelData.sourceMedicine.issueType ?? '—'}</div></div>
-                                      <div><strong>Inicio</strong><div className="muted">{formatDateOnly(panelData.sourceMedicine.startedAt)}</div></div>
-                                      <div><strong>Fin esperado</strong><div className="muted">{formatDateOnly(panelData.sourceMedicine.expectedEndAt)}</div></div>
-                                      <div><strong>Observaciones</strong><div className="muted">{panelData.sourceMedicine.observations ?? '—'}</div></div>
-                                      <div><strong>codDcp</strong><div className="muted">{panelData.sourceMedicine.codDcp ?? '—'}</div></div>
+                                      <div>
+                                        <strong>CN origen</strong>
+                                        <div className="muted">{panelData.sourceMedicine.cn}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Estado local</strong>
+                                        <div className="muted">{panelData.sourceMedicine.localStatus}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Descripción</strong>
+                                        <div className="muted">{panelData.sourceMedicine.shortDescription}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Tipo</strong>
+                                        <div className="muted">{panelData.sourceMedicine.issueType ?? '—'}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Inicio</strong>
+                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.startedAt)}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Fin esperado</strong>
+                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.expectedEndAt)}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Observaciones</strong>
+                                        <div className="muted">{panelData.sourceMedicine.observations ?? '—'}</div>
+                                      </div>
+                                      <div>
+                                        <strong>codDcp</strong>
+                                        <div className="muted">{panelData.sourceMedicine.codDcp ?? '—'}</div>
+                                      </div>
                                     </div>
 
                                     <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
@@ -629,7 +677,11 @@ export default function MonitorClient({
                                                 <td>{formatDateOnly(alternative.supplyExpectedEndAt)}</td>
                                                 <td>{alternative.supplyObservations ?? '—'}</td>
                                                 <td>{getHospitalPresenceLabel(alternative.hospitalPresenceStatus)}</td>
-                                                <td>{alternative.hospitalPresenceStatus === 'NO_PRESENTE' ? '—' : alternative.hospitalStatusNormalized ?? '—'}</td>
+                                                <td>
+                                                  {alternative.hospitalPresenceStatus === 'NO_PRESENTE'
+                                                    ? '—'
+                                                    : alternative.hospitalStatusNormalized ?? '—'}
+                                                </td>
                                               </tr>
                                             ))}
                                           </tbody>
