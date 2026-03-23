@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
 
+import { prepareNomenclatorSource } from '@/lib/nomenclator-download';
 import { prisma } from '@/lib/prisma';
 import type { ScheduledJobExecutionResult } from '@/lib/scheduled-jobs';
 
@@ -14,6 +15,11 @@ type NomenclatorUpdateSummary = {
   discarded: number;
   source: string | null;
   file: string | null;
+  sourceMode: 'zip_download' | 'local_xml_path';
+  zipDownloadImplemented: true;
+  zipUrl: string | null;
+  downloadedZipBytes: number | null;
+  extractedXmlPath: string | null;
 };
 
 export type NomenclatorJobRunOverview = {
@@ -29,22 +35,16 @@ export type NomenclatorJobRunOverview = {
   file: string | null;
 };
 
-function resolveConfiguredNomenclatorXmlPath(): string {
-  const configuredPath = process.env.NOMENCLATOR_XML_PATH?.trim();
-
-  if (!configuredPath) {
-    throw new Error('Falta NOMENCLATOR_XML_PATH para ejecutar el job programado del Nomenclátor.');
-  }
-
-  return configuredPath;
-}
-
 function normalizeNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 function normalizeString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+function normalizeSourceMode(value: unknown): 'zip_download' | 'local_xml_path' {
+  return value === 'zip_download' ? 'zip_download' : 'local_xml_path';
 }
 
 function normalizeNomenclatorSummary(summary: Record<string, unknown>): NomenclatorUpdateSummary {
@@ -54,23 +54,36 @@ function normalizeNomenclatorSummary(summary: Record<string, unknown>): Nomencla
     discarded: normalizeNumber(summary.discarded) ?? 0,
     source: normalizeString(summary.source),
     file: normalizeString(summary.file),
+    sourceMode: normalizeSourceMode(summary.sourceMode),
+    zipDownloadImplemented: true,
+    zipUrl: normalizeString(summary.zipUrl),
+    downloadedZipBytes: normalizeNumber(summary.downloadedZipBytes),
+    extractedXmlPath: normalizeString(summary.extractedXmlPath),
   };
 }
 
 export async function executeNomenclatorUpdate(): Promise<ScheduledJobExecutionResult> {
-  const xmlPath = resolveConfiguredNomenclatorXmlPath();
-  const rawSummary = await importNomenclatorFromFile(xmlPath, { cwd: process.cwd() });
-  const summary = normalizeNomenclatorSummary(rawSummary);
+  const preparedSource = await prepareNomenclatorSource();
 
-  return {
-    status: 'completed',
-    summary: {
-      sourceMode: 'local_xml_path',
-      zipDownloadImplemented: false,
-      ...summary,
-    },
-    errors: null,
-  };
+  try {
+    const rawSummary = await importNomenclatorFromFile(preparedSource.xmlPath, { cwd: process.cwd() });
+    const baseSummary = normalizeNomenclatorSummary(rawSummary);
+
+    return {
+      status: 'completed',
+      summary: {
+        ...baseSummary,
+        sourceMode: preparedSource.sourceMode,
+        zipDownloadImplemented: true,
+        zipUrl: preparedSource.zipUrl,
+        downloadedZipBytes: preparedSource.downloadedZipBytes,
+        extractedXmlPath: preparedSource.extractedXmlPath,
+      },
+      errors: null,
+    };
+  } finally {
+    await preparedSource.cleanup();
+  }
 }
 
 export async function executeScheduledNomenclatorUpdate(): Promise<ScheduledJobExecutionResult> {
