@@ -254,10 +254,7 @@ export async function getMedicineAlternatives(
       };
     }
 
-    const nomenclatorAlternatives = await listNomenclatorAlternativesByCodDcp(
-      sourceNomenclatorProduct.codDcp,
-      normalizedCn,
-    );
+    const nomenclatorAlternatives = await listNomenclatorAlternativesByCodDcp(sourceNomenclatorProduct.codDcp, normalizedCn);
 
     if (nomenclatorAlternatives.length === 0) {
       return {
