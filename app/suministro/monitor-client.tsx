@@ -1,14 +1,20 @@
 'use client';
 
-import { useMemo, useState, useTransition, type CSSProperties } from 'react';
+import { Fragment, useMemo, useState, useTransition, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 
+import type {
+  GetMedicineAlternativesOutput,
+  MedicineAlternative,
+  MedicineAlternativesResult,
+} from '@/lib/medicine-alternatives';
 import type { ActiveSupplyIssue, SupplyMonitorOverview } from '@/lib/supply-monitor';
 
 type MonitorClientProps = {
   overview: SupplyMonitorOverview;
   activeIssues: ActiveSupplyIssue[];
   runMonitorAction: () => Promise<void>;
+  getMedicineAlternativesAction: (input: { cn: string }) => Promise<GetMedicineAlternativesOutput>;
 };
 
 type SortColumn = 'cn' | 'status' | 'shortDescription' | 'issueType' | 'startedAt' | 'expectedEndAt';
@@ -123,7 +129,38 @@ function compareActiveIssues(
   return left.cn.localeCompare(right.cn);
 }
 
-export default function MonitorClient({ overview, activeIssues, runMonitorAction }: MonitorClientProps) {
+function getCommercializationLabel(value: MedicineAlternative['commercializationStatus']): string {
+  switch (value) {
+    case 'COMERCIALIZADO':
+      return 'Comercializado';
+    case 'NO_COMERCIALIZADO':
+      return 'No comercializado';
+    default:
+      return 'Desconocido';
+  }
+}
+
+function getSupplyLabel(value: MedicineAlternative['supplyStatus']): string {
+  switch (value) {
+    case 'CON_ROTURA':
+      return 'Sí';
+    case 'SIN_ROTURA':
+      return 'No';
+    default:
+      return 'Desconocido';
+  }
+}
+
+function getHospitalPresenceLabel(value: MedicineAlternative['hospitalPresenceStatus']): string {
+  return value === 'NO_PRESENTE' ? 'No' : 'Sí';
+}
+
+export default function MonitorClient({
+  overview,
+  activeIssues,
+  runMonitorAction,
+  getMedicineAlternativesAction,
+}: MonitorClientProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -131,6 +168,11 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
   const [showLab, setShowLab] = useState(true);
   const [sortColumn, setSortColumn] = useState<SortColumn>('startedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+  const [expandedCn, setExpandedCn] = useState<string | null>(null);
+  const [showNonCommercialized, setShowNonCommercialized] = useState(false);
+  const [alternativesByCn, setAlternativesByCn] = useState<Record<string, MedicineAlternativesResult>>({});
+  const [alternativesErrorByCn, setAlternativesErrorByCn] = useState<Record<string, string>>({});
+  const [loadingAlternativesCn, setLoadingAlternativesCn] = useState<string | null>(null);
 
   const filteredActiveIssues = useMemo(() => {
     if ((!showActivo && !showLab) || (showActivo && showLab)) {
@@ -179,6 +221,58 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
         router.refresh();
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'No se pudo ejecutar el monitor AEMPS.');
+      }
+    });
+  }
+
+  function getVisibleAlternatives(cn: string): MedicineAlternative[] {
+    const panelData = alternativesByCn[cn];
+    if (!panelData) {
+      return [];
+    }
+
+    return showNonCommercialized
+      ? panelData.alternatives
+      : panelData.alternatives.filter((item) => item.commercializationStatus === 'COMERCIALIZADO');
+  }
+
+  function handleToggleAlternatives(issue: ActiveSupplyIssue) {
+    if (expandedCn === issue.cn) {
+      setExpandedCn(null);
+      return;
+    }
+
+    setExpandedCn(issue.cn);
+    setShowNonCommercialized(false);
+
+    if (alternativesByCn[issue.cn] || loadingAlternativesCn === issue.cn) {
+      return;
+    }
+
+    setLoadingAlternativesCn(issue.cn);
+    setAlternativesErrorByCn((current) => {
+      const next = { ...current };
+      delete next[issue.cn];
+      return next;
+    });
+
+    startTransition(async () => {
+      try {
+        const response = await getMedicineAlternativesAction({ cn: issue.cn });
+
+        if (!response.ok) {
+          setAlternativesErrorByCn((current) => ({ ...current, [issue.cn]: response.message }));
+          return;
+        }
+
+        setAlternativesByCn((current) => ({ ...current, [issue.cn]: response.data }));
+      } catch (error) {
+        setAlternativesErrorByCn((current) => ({
+          ...current,
+          [issue.cn]: error instanceof Error ? error.message : 'No se pudieron cargar las alternativas.',
+        }));
+      } finally {
+        setLoadingAlternativesCn((current) => (current === issue.cn ? null : current));
       }
     });
   }
@@ -343,20 +437,145 @@ export default function MonitorClient({ overview, activeIssues, runMonitorAction
                       </button>
                     </th>
                     <th>Observaciones</th>
+                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedActiveIssues.map((issue) => (
-                    <tr key={`${issue.cn}-${issue.articleCode}`}>
-                      <td>{issue.cn}</td>
-                      <td>{issue.status}</td>
-                      <td>{issue.shortDescription}</td>
-                      <td>{issue.issueType ?? '—'}</td>
-                      <td>{formatDateOnly(issue.startedAt)}</td>
-                      <td>{formatDateOnly(issue.expectedEndAt)}</td>
-                      <td>{issue.observations ?? '—'}</td>
-                    </tr>
-                  ))}
+                  {sortedActiveIssues.map((issue) => {
+                    const panelData = alternativesByCn[issue.cn] ?? null;
+                    const visibleAlternatives = getVisibleAlternatives(issue.cn);
+                    const panelError = alternativesErrorByCn[issue.cn] ?? null;
+                    const isExpanded = expandedCn === issue.cn;
+                    const isLoadingAlternatives = loadingAlternativesCn === issue.cn;
+
+                    return (
+                      <Fragment key={`${issue.cn}-${issue.articleCode}`}>
+                        <tr>
+                          <td>{issue.cn}</td>
+                          <td>{issue.status}</td>
+                          <td>{issue.shortDescription}</td>
+                          <td>{issue.issueType ?? '—'}</td>
+                          <td>{formatDateOnly(issue.startedAt)}</td>
+                          <td>{formatDateOnly(issue.expectedEndAt)}</td>
+                          <td>{issue.observations ?? '—'}</td>
+                          <td>
+                            <button className="secondary-button" onClick={() => handleToggleAlternatives(issue)} type="button">
+                              {isExpanded ? 'Ocultar alternativas' : 'Consultar alternativas'}
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded ? (
+                          <tr>
+                            <td colSpan={8}>
+                              <div className="inline-panel">
+                                <div className="section-title">
+                                  <div>
+                                    <h3 style={{ marginBottom: 8 }}>Alternativas equivalentes</h3>
+                                    <div className="muted">
+  Cruce a través de nomenclator de especialidades equivalentes (mismo principio activo, misma dosis y misma forma farmacéutica).
+</div>
+                                  </div>
+                                  <span className="badge primary">{issue.cn}</span>
+                                </div>
+
+                                {isLoadingAlternatives ? <p className="muted">Consultando alternativas…</p> : null}
+                                {panelError ? <p className="muted">{panelError}</p> : null}
+
+                                {panelData ? (
+                                  <div className="grid" style={{ gap: 16 }}>
+                                    <div className="grid cols-2" style={{ gap: 12 }}>
+                                      <div>
+                                        <strong>CN origen</strong>
+                                        <div className="muted">{panelData.sourceMedicine.cn}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Estado local</strong>
+                                        <div className="muted">{panelData.sourceMedicine.localStatus}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Descripción</strong>
+                                        <div className="muted">{panelData.sourceMedicine.shortDescription}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Tipo</strong>
+                                        <div className="muted">{panelData.sourceMedicine.issueType ?? '—'}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Inicio</strong>
+                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.startedAt)}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Fin esperado</strong>
+                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.expectedEndAt)}</div>
+                                      </div>
+                                      <div>
+                                        <strong>Observaciones</strong>
+                                        <div className="muted">{panelData.sourceMedicine.observations ?? '—'}</div>
+                                      </div>
+                                      <div>
+                                        <strong>codDcp</strong>
+                                        <div className="muted">{panelData.sourceMedicine.codDcp ?? '—'}</div>
+                                      </div>
+                                    </div>
+
+                                    <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+                                      <input
+                                        checked={showNonCommercialized}
+                                        onChange={(event) => setShowNonCommercialized(event.target.checked)}
+                                        type="checkbox"
+                                      />
+                                      <span>Mostrar también no comercializados</span>
+                                    </label>
+
+                                    {visibleAlternatives.length === 0 ? (
+                                      <p className="muted">No hay alternativas visibles con el filtro actual.</p>
+                                    ) : (
+                                      <div className="table-scroll">
+                                        <table className="table">
+                                          <thead>
+                                            <tr>
+                                              <th>CN</th>
+                                              <th>Presentación</th>
+                                              <th>Comercializado</th>
+                                              <th>Rotura</th>
+                                              <th>Inicio</th>
+                                              <th>Fin esperado</th>
+                                              <th>Observaciones</th>
+                                              <th>En tu hospital</th>
+                                              <th>Estado Orion</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {visibleAlternatives.map((alternative) => (
+                                              <tr key={alternative.cn}>
+                                                <td>{alternative.cn}</td>
+                                                <td>{alternative.presentation}</td>
+                                                <td>{getCommercializationLabel(alternative.commercializationStatus)}</td>
+                                                <td>{getSupplyLabel(alternative.supplyStatus)}</td>
+                                                <td>{formatDateOnly(alternative.supplyStartedAt)}</td>
+                                                <td>{formatDateOnly(alternative.supplyExpectedEndAt)}</td>
+                                                <td>{alternative.supplyObservations ?? '—'}</td>
+                                                <td>{getHospitalPresenceLabel(alternative.hospitalPresenceStatus)}</td>
+                                                <td>
+                                                  {alternative.hospitalPresenceStatus === 'NO_PRESENTE'
+                                                    ? '—'
+                                                    : alternative.hospitalStatusNormalized ?? '—'}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
