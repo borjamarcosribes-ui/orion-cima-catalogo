@@ -129,11 +129,11 @@ function parseDate(value: string | null): Date | null {
   return value ? new Date(value) : null;
 }
 
-export async function executeSupplyMonitor() {
+export async function executeSupplyMonitor(options?: { source?: 'manual' | 'scheduled' }) {
   const run = await prisma.supplyMonitorRun.create({
     data: {
       status: 'running',
-      source: 'manual',
+      source: options?.source ?? 'manual',
     },
   });
 
@@ -285,18 +285,16 @@ export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
     });
 
     return rows
-      .map(
-        (row): ActiveSupplyIssue => ({
-          cn: row.cn,
-          articleCode: row.watchedMedicine.articleCode,
-          shortDescription: row.watchedMedicine.shortDescription,
-          status: row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
-          issueType: row.issueType,
-          startedAt: row.startedAt?.toISOString() ?? null,
-          expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
-          observations: row.observations,
-        }),
-      )
+      .map((row) => ({
+        cn: row.cn,
+        articleCode: row.watchedMedicine.articleCode,
+        shortDescription: row.watchedMedicine.shortDescription,
+        status: row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
+        issueType: row.issueType,
+        startedAt: row.startedAt?.toISOString() ?? null,
+        expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
+        observations: row.observations,
+      }))
       .sort((left, right) => {
         if (left.startedAt && right.startedAt) {
           const byStartedAt = right.startedAt.localeCompare(left.startedAt);

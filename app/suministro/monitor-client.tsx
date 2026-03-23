@@ -472,8 +472,9 @@ export default function MonitorClient({
                                   <div>
                                     <h3 style={{ marginBottom: 8 }}>Alternativas equivalentes</h3>
                                     <div className="muted">
-  Cruce a través de nomenclator de especialidades equivalentes (mismo principio activo, misma dosis y misma forma farmacéutica).
-</div>
+                                      Cruce a través de nomenclator de especialidades equivalentes (mismo principio activo,
+                                      misma dosis y misma forma farmacéutica).
+                                    </div>
                                   </div>
                                   <span className="badge primary">{issue.cn}</span>
                                 </div>
