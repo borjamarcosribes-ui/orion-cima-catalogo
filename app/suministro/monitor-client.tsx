@@ -3,7 +3,10 @@
 import { Fragment, useMemo, useState, useTransition, type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 
-import type { RunNomenclatorUpdateActionResult } from '@/app/suministro/actions';
+import type {
+  RunNomenclatorUpdateActionResult,
+  RunSupplyMonitorActionResult,
+} from '@/app/suministro/actions';
 import type {
   GetMedicineAlternativesOutput,
   MedicineAlternative,
@@ -15,7 +18,7 @@ import type { ActiveSupplyIssue, SupplyMonitorOverview } from '@/lib/supply-moni
 type MonitorClientProps = {
   overview: SupplyMonitorOverview;
   activeIssues: ActiveSupplyIssue[];
-  runMonitorAction: () => Promise<void>;
+  runMonitorAction: () => Promise<RunSupplyMonitorActionResult>;
   runNomenclatorUpdateAction: () => Promise<RunNomenclatorUpdateActionResult>;
   getMedicineAlternativesAction: (input: { cn: string }) => Promise<GetMedicineAlternativesOutput>;
   latestNomenclatorRun: NomenclatorJobRunOverview | null;
@@ -172,7 +175,7 @@ export default function MonitorClient({
   const [monitorMessage, setMonitorMessage] = useState<string | null>(null);
   const [nomenclatorMessage, setNomenclatorMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
-  const [isPending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
   const [showActivo, setShowActivo] = useState(true);
   const [showLab, setShowLab] = useState(true);
   const [sortColumn, setSortColumn] = useState<SortColumn>('startedAt');
@@ -183,8 +186,8 @@ export default function MonitorClient({
   const [alternativesErrorByCn, setAlternativesErrorByCn] = useState<Record<string, string>>({});
   const [loadingAlternativesCn, setLoadingAlternativesCn] = useState<string | null>(null);
 
-  const isMonitorRunning = isPending && pendingAction === 'monitor';
-  const isNomenclatorRunning = isPending && pendingAction === 'nomenclator';
+  const isMonitorRunning = pendingAction === 'monitor';
+  const isNomenclatorRunning = pendingAction === 'nomenclator';
 
   const filteredActiveIssues = useMemo(() => {
     if ((!showActivo && !showLab) || (showActivo && showLab)) {
@@ -223,53 +226,64 @@ export default function MonitorClient({
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
   }
 
-  function handleRunMonitor() {
+  async function handleRunMonitor() {
     setMonitorMessage(null);
+    setPendingAction('monitor');
 
-    startTransition(async () => {
-      try {
-        setPendingAction('monitor');
-        await runMonitorAction();
-        setMonitorMessage('Monitor AEMPS ejecutado correctamente.');
-        router.refresh();
-      } catch (error) {
-        setMonitorMessage(error instanceof Error ? error.message : 'No se pudo ejecutar el monitor AEMPS.');
-      } finally {
-        setPendingAction((current) => (current === 'monitor' ? null : current));
+    try {
+      const response = await runMonitorAction();
+
+      switch (response.result.status) {
+        case 'completed':
+          setMonitorMessage('Monitor AEMPS ejecutado correctamente.');
+          break;
+        case 'completed_with_errors':
+          setMonitorMessage('Monitor AEMPS completado con avisos. Revisa el historial.');
+          break;
+        case 'skipped_locked':
+          setMonitorMessage('Ya hay una ejecución del monitor AEMPS / CIMA en curso.');
+          break;
+        default:
+          setMonitorMessage('No se pudo ejecutar el monitor AEMPS.');
+          break;
       }
-    });
+
+      router.refresh();
+    } catch (error) {
+      setMonitorMessage(error instanceof Error ? error.message : 'No se pudo ejecutar el monitor AEMPS.');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
-  function handleRunNomenclatorUpdate() {
+  async function handleRunNomenclatorUpdate() {
     setNomenclatorMessage(null);
+    setPendingAction('nomenclator');
 
-    startTransition(async () => {
-      try {
-        setPendingAction('nomenclator');
-        const response = await runNomenclatorUpdateAction();
+    try {
+      const response = await runNomenclatorUpdateAction();
 
-        switch (response.result.status) {
-          case 'completed':
-            setNomenclatorMessage('Nomenclátor actualizado correctamente.');
-            break;
-          case 'completed_with_errors':
-            setNomenclatorMessage('Actualización completada con avisos. Revisa el último resumen.');
-            break;
-          case 'skipped_locked':
-            setNomenclatorMessage('Ya hay una actualización de Nomenclátor en curso.');
-            break;
-          default:
-            setNomenclatorMessage('No se pudo actualizar el Nomenclátor.');
-            break;
-        }
-
-        router.refresh();
-      } catch (error) {
-        setNomenclatorMessage(error instanceof Error ? error.message : 'No se pudo actualizar el Nomenclátor.');
-      } finally {
-        setPendingAction((current) => (current === 'nomenclator' ? null : current));
+      switch (response.result.status) {
+        case 'completed':
+          setNomenclatorMessage('Nomenclátor actualizado correctamente.');
+          break;
+        case 'completed_with_errors':
+          setNomenclatorMessage('Actualización completada con avisos. Revisa el último resumen.');
+          break;
+        case 'skipped_locked':
+          setNomenclatorMessage('Ya hay una actualización de Nomenclátor en curso.');
+          break;
+        default:
+          setNomenclatorMessage('No se pudo actualizar el Nomenclátor.');
+          break;
       }
-    });
+
+      router.refresh();
+    } catch (error) {
+      setNomenclatorMessage(error instanceof Error ? error.message : 'No se pudo actualizar el Nomenclátor.');
+    } finally {
+      setPendingAction(null);
+    }
   }
 
   function getVisibleAlternatives(cn: string): MedicineAlternative[] {
@@ -344,7 +358,16 @@ export default function MonitorClient({
               className="primary-button"
               disabled={isMonitorRunning}
               onClick={handleRunMonitor}
-              style={isMonitorRunning ? { opacity: 0.65, filter: 'saturate(0.8)', boxShadow: 'inset 0 0 0 9999px rgba(255,255,255,0.08)' } : undefined}
+              style={
+                isMonitorRunning
+                  ? {
+                      opacity: 0.72,
+                      background: '#6f89c9',
+                      transform: 'scale(0.985)',
+                      boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
+                    }
+                  : undefined
+              }
               type="button"
             >
               {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
@@ -384,7 +407,9 @@ export default function MonitorClient({
               </div>
             </div>
           ) : (
-            <p className="muted" style={{ marginTop: 18 }}>Todavía no se ha ejecutado el monitor.</p>
+            <p className="muted" style={{ marginTop: 18 }}>
+              Todavía no se ha ejecutado el monitor.
+            </p>
           )}
         </article>
 
@@ -404,7 +429,16 @@ export default function MonitorClient({
               className="primary-button"
               disabled={isNomenclatorRunning}
               onClick={handleRunNomenclatorUpdate}
-              style={isNomenclatorRunning ? { opacity: 0.65, filter: 'saturate(0.8)', boxShadow: 'inset 0 0 0 9999px rgba(255,255,255,0.08)' } : undefined}
+              style={
+                isNomenclatorRunning
+                  ? {
+                      opacity: 0.72,
+                      background: '#6f89c9',
+                      transform: 'scale(0.985)',
+                      boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
+                    }
+                  : undefined
+              }
               type="button"
             >
               {isNomenclatorRunning ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
@@ -416,7 +450,9 @@ export default function MonitorClient({
             <ul className="list compact-list" style={{ marginTop: 18 }}>
               <li>
                 <strong>Última ejecución</strong>
-                <div className="muted">{formatDateTime(latestNomenclatorRun.finishedAt ?? latestNomenclatorRun.startedAt)}</div>
+                <div className="muted">
+                  {formatDateTime(latestNomenclatorRun.finishedAt ?? latestNomenclatorRun.startedAt)}
+                </div>
               </li>
               <li>
                 <strong>Estado</strong>
@@ -436,7 +472,9 @@ export default function MonitorClient({
               </li>
             </ul>
           ) : (
-            <p className="muted" style={{ marginTop: 18 }}>Todavía no se ha ejecutado la actualización del Nomenclátor.</p>
+            <p className="muted" style={{ marginTop: 18 }}>
+              Todavía no se ha ejecutado la actualización del Nomenclátor.
+            </p>
           )}
         </article>
       </section>
@@ -538,7 +576,11 @@ export default function MonitorClient({
                       </button>
                     </th>
                     <th>
-                      <button onClick={() => handleSort('shortDescription')} style={sortableHeaderButtonStyle} type="button">
+                      <button
+                        onClick={() => handleSort('shortDescription')}
+                        style={sortableHeaderButtonStyle}
+                        type="button"
+                      >
                         Descripción{getSortIndicator('shortDescription')}
                       </button>
                     </th>
@@ -553,7 +595,11 @@ export default function MonitorClient({
                       </button>
                     </th>
                     <th>
-                      <button onClick={() => handleSort('expectedEndAt')} style={sortableHeaderButtonStyle} type="button">
+                      <button
+                        onClick={() => handleSort('expectedEndAt')}
+                        style={sortableHeaderButtonStyle}
+                        type="button"
+                      >
                         Fin esperado{getSortIndicator('expectedEndAt')}
                       </button>
                     </th>
@@ -593,7 +639,8 @@ export default function MonitorClient({
                                   <div>
                                     <h3 style={{ marginBottom: 8 }}>Alternativas equivalentes</h3>
                                     <div className="muted">
-                                      Cruce a través de nomenclator de especialidades equivalentes (mismo principio activo, misma dosis y misma forma farmacéutica).
+                                      Cruce a través de nomenclator de especialidades equivalentes (mismo principio
+                                      activo, misma dosis y misma forma farmacéutica).
                                     </div>
                                   </div>
                                   <span className="badge primary">{issue.cn}</span>
@@ -627,7 +674,9 @@ export default function MonitorClient({
                                       </div>
                                       <div>
                                         <strong>Fin esperado</strong>
-                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.expectedEndAt)}</div>
+                                        <div className="muted">
+                                          {formatDateOnly(panelData.sourceMedicine.expectedEndAt)}
+                                        </div>
                                       </div>
                                       <div>
                                         <strong>Observaciones</strong>

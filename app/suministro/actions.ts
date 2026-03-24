@@ -11,15 +11,40 @@ import {
 import { runScheduledJob, type ScheduledJobExecutionResult } from '@/lib/scheduled-jobs';
 import { executeSupplyMonitor } from '@/lib/supply-monitor';
 
+export type RunSupplyMonitorActionResult = {
+  runId: string;
+  lockKey: string;
+  result: ScheduledJobExecutionResult;
+};
+
 export type RunNomenclatorUpdateActionResult = {
   runId: string;
   lockKey: string;
   result: ScheduledJobExecutionResult;
 };
 
-export async function runSupplyMonitorAction() {
-  await executeSupplyMonitor();
+export async function runSupplyMonitorAction(): Promise<RunSupplyMonitorActionResult> {
+  const execution = await runScheduledJob({
+    jobName: 'SUPPLY_MONITOR',
+    triggerType: 'manual_http',
+    requestedBy: 'suministro-ui',
+    handler: async () => {
+      const monitorResult = await executeSupplyMonitor({ source: 'manual' });
+
+      return {
+        status: 'completed',
+        summary: {
+          supplyMonitorRunId: monitorResult.runId,
+        },
+        errors: null,
+      };
+    },
+  });
+
   revalidatePath('/suministro');
+  revalidatePath('/automatizacion');
+
+  return execution;
 }
 
 export async function runNomenclatorUpdateAction(): Promise<RunNomenclatorUpdateActionResult> {
@@ -31,6 +56,7 @@ export async function runNomenclatorUpdateAction(): Promise<RunNomenclatorUpdate
   });
 
   revalidatePath('/suministro');
+  revalidatePath('/automatizacion');
 
   return execution;
 }
