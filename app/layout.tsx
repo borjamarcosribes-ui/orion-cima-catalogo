@@ -22,6 +22,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <NavLink href="/importaciones">Importaciones</NavLink>
               <NavLink href="/catalogo">Catálogo operativo</NavLink>
               <NavLink href="/suministro">Suministro</NavLink>
+              <NavLink href="/automatizacion">Automatización</NavLink>
             </nav>
           </div>
         </header>
