@@ -85,11 +85,17 @@ model CimaCache {
   laboratory              String?
   commercializationStatus String?
   supplyStatus            String?
+  technicalSheetUrl       String?
+  leafletUrl              String?
+  htmlUrl                 String?
+  pdfUrl                  String?
   rawPayload              String?
   fetchedAt               DateTime?
   updatedAt               DateTime       @updatedAt
   medicineMaster          MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
 
+  @@index([atcCode])
+  @@index([laboratory])
   @@map("cima_cache")
 }
 
@@ -253,6 +259,18 @@ model NomenclatorProduct {
   @@index([commercializationStatus])
   @@index([codDcp, commercializationStatus])
   @@map("nomenclator_products")
+}
+
+model BifimedCache {
+  cn              String   @id
+  fundingStatus   String
+  fundingModality String?
+  summary         String?
+  rawPayload      String?
+  updatedAt       DateTime @updatedAt
+
+  @@index([fundingStatus])
+  @@map("bifimed_cache")
 }
 
 model ScheduledJobRun {
