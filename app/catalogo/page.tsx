@@ -1,11 +1,13 @@
 import Link from 'next/link';
 
+import { CatalogFiltersForm } from './catalog-filters';
 import { listCatalogByCn, type CatalogFilters } from '@/lib/catalog';
 
 const EMPTY_VALUE = '';
 
 type CommercializedValue = '' | 'COMERCIALIZADO' | 'NO_COMERCIALIZADO';
 type BifimedValue = '' | 'FINANCIADO' | 'NO_FINANCIADO' | 'EN_ESTUDIO';
+type HospitalStatusValue = '' | 'ACTIVO' | 'INACTIVO' | 'LAB' | 'OTROS';
 
 function toUrlSearchParams(filters: CatalogFilters, options?: { forceCommercializedParam?: boolean }): string {
   const params = new URLSearchParams();
@@ -56,6 +58,14 @@ function parseIncluded(raw: string): 'SI' | 'NO' | undefined {
   }
 
   return undefined;
+}
+
+function parseHospitalStatus(raw: string): HospitalStatusValue {
+  if (raw === '' || raw === 'ACTIVO' || raw === 'INACTIVO' || raw === 'LAB' || raw === 'OTROS') {
+    return raw;
+  }
+
+  return '';
 }
 
 function parseBifimed(raw: string): BifimedValue {
@@ -119,6 +129,8 @@ export default async function CatalogPage({ searchParams }: PageProps) {
   const commercializedParsed = parseCommercialized(commercializedRaw);
   const commercializedHasValidParam = hasCommercializedParam && commercializedParsed.isValid;
   const commercializedExplicitAll = commercializedHasValidParam && commercializedParsed.value === '';
+  const includedInHospital = parseIncluded(normalizeQuery(query.included));
+  const hospitalStatusParsed = parseHospitalStatus(normalizeQuery(query.hospitalStatus));
 
   const filters: CatalogFilters = {
     q: normalizeQuery(query.q),
@@ -127,8 +139,8 @@ export default async function CatalogPage({ searchParams }: PageProps) {
     laboratory: normalizeQuery(query.laboratory),
     atc: normalizeQuery(query.atc),
     commercializationStatus: commercializedHasValidParam ? commercializedParsed.value : 'COMERCIALIZADO',
-    includedInHospital: parseIncluded(normalizeQuery(query.included)),
-    hospitalStatus: normalizeQuery(query.hospitalStatus),
+    includedInHospital,
+    hospitalStatus: includedInHospital === 'SI' && hospitalStatusParsed !== '' ? hospitalStatusParsed : undefined,
     bifimedFundingStatus: parseBifimed(normalizeQuery(query.bifimed)),
     page: parsePage(normalizeQuery(query.page)),
   };
@@ -154,74 +166,17 @@ export default async function CatalogPage({ searchParams }: PageProps) {
           <span className="badge success">Base local: nomenclátor + CIMA + Orion + BIFIMED</span>
         </div>
 
-        <form method="get" className="grid cols-3" style={{ gap: 12, marginTop: 16 }}>
-          <label>
-            <small className="muted">Nombre del medicamento</small>
-            <input name="q" defaultValue={filters.q ?? ''} />
-          </label>
-
-          <label>
-            <small className="muted">Principio activo</small>
-            <input name="activeIngredient" defaultValue={filters.activeIngredient ?? ''} />
-          </label>
-
-          <label>
-            <small className="muted">CN</small>
-            <input name="cn" defaultValue={filters.cn ?? ''} />
-          </label>
-
-          <label>
-            <small className="muted">Laboratorio</small>
-            <input name="laboratory" defaultValue={filters.laboratory ?? ''} />
-          </label>
-
-          <label>
-            <small className="muted">ATC</small>
-            <input name="atc" defaultValue={filters.atc ?? ''} />
-          </label>
-
-          <label>
-            <small className="muted">Comercializado</small>
-            <select name="commercialized" defaultValue={filters.commercializationStatus ?? ''}>
-              <option value="">Todos</option>
-              <option value="COMERCIALIZADO">Comercializado</option>
-              <option value="NO_COMERCIALIZADO">No comercializado</option>
-            </select>
-          </label>
-
-          <label>
-            <small className="muted">Incluido en hospital</small>
-            <select name="included" defaultValue={filters.includedInHospital ?? ''}>
-              <option value="">Todos</option>
-              <option value="SI">Sí</option>
-              <option value="NO">No</option>
-            </select>
-          </label>
-
-          <label>
-            <small className="muted">Estado en hospital</small>
-            <input name="hospitalStatus" defaultValue={filters.hospitalStatus ?? ''} />
-          </label>
-
-          <label>
-            <small className="muted">BIFIMED</small>
-            <select name="bifimed" defaultValue={filters.bifimedFundingStatus ?? ''}>
-              <option value="">Todos</option>
-              <option value="FINANCIADO">Financiado</option>
-              <option value="NO_FINANCIADO">No financiado</option>
-              <option value="EN_ESTUDIO">En estudio</option>
-            </select>
-          </label>
-
-          <div className="actions-row" style={{ marginTop: 0 }}>
-            <button type="submit" className="primary-button">
-              Aplicar filtros
-            </button>
-            <Link className="secondary-button" href="/catalogo">
-              Limpiar
-            </Link>
-          </div>
-        </form>
+        <CatalogFiltersForm
+          q={filters.q ?? ''}
+          activeIngredient={filters.activeIngredient ?? ''}
+          cn={filters.cn ?? ''}
+          laboratory={filters.laboratory ?? ''}
+          atc={filters.atc ?? ''}
+          commercialized={filters.commercializationStatus ?? ''}
+          included={filters.includedInHospital ?? ''}
+          hospitalStatus={filters.hospitalStatus ?? ''}
+          bifimed={filters.bifimedFundingStatus ?? ''}
+        />
       </section>
 
       <section className="grid" style={{ gap: 14 }}>

@@ -127,7 +127,6 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
   pushLikeClause(clauses, Prisma.sql`COALESCE(c.activeIngredient, '')`, filters.activeIngredient);
   pushLikeClause(clauses, Prisma.sql`COALESCE(c.laboratory, '')`, filters.laboratory);
   pushLikeClause(clauses, Prisma.sql`COALESCE(c.atcCode, '')`, filters.atc);
-  pushLikeClause(clauses, Prisma.sql`COALESCE(w.statusOriginal, '')`, filters.hospitalStatus);
 
   if (filters.commercializationStatus && filters.commercializationStatus.trim().length > 0) {
     clauses.push(Prisma.sql`n.commercializationStatus = ${filters.commercializationStatus}`);
@@ -139,6 +138,30 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
 
   if (filters.includedInHospital === 'NO') {
     clauses.push(Prisma.sql`w.cn IS NULL`);
+  }
+
+  if (filters.includedInHospital === 'SI') {
+    switch (filters.hospitalStatus) {
+      case 'ACTIVO':
+        clauses.push(Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'activo'`);
+        break;
+      case 'INACTIVO':
+        clauses.push(Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'inactivo'`);
+        break;
+      case 'LAB':
+        clauses.push(Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'lab'`);
+        break;
+      case 'OTROS':
+        clauses.push(
+          Prisma.sql`(
+            TRIM(COALESCE(w.statusOriginal, '')) <> ''
+            AND LOWER(TRIM(COALESCE(w.statusOriginal, ''))) NOT IN ('activo', 'inactivo', 'lab')
+          )`,
+        );
+        break;
+      default:
+        break;
+    }
   }
 
   if (filters.bifimedFundingStatus && filters.bifimedFundingStatus.trim().length > 0) {
