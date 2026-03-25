@@ -4,7 +4,10 @@ import { listCatalogByCn, type CatalogFilters } from '@/lib/catalog';
 
 const EMPTY_VALUE = '';
 
-function toUrlSearchParams(filters: CatalogFilters): string {
+type CommercializedValue = '' | 'COMERCIALIZADO' | 'NO_COMERCIALIZADO';
+type BifimedValue = '' | 'FINANCIADO' | 'NO_FINANCIADO' | 'EN_ESTUDIO';
+
+function toUrlSearchParams(filters: CatalogFilters, options?: { forceCommercializedParam?: boolean }): string {
   const params = new URLSearchParams();
 
   if (filters.q) params.set('q', filters.q);
@@ -12,7 +15,9 @@ function toUrlSearchParams(filters: CatalogFilters): string {
   if (filters.cn) params.set('cn', filters.cn);
   if (filters.laboratory) params.set('laboratory', filters.laboratory);
   if (filters.atc) params.set('atc', filters.atc);
-  if (filters.commercializationStatus) params.set('commercialized', filters.commercializationStatus);
+  if (filters.commercializationStatus || options?.forceCommercializedParam) {
+    params.set('commercialized', filters.commercializationStatus ?? '');
+  }
   if (filters.includedInHospital) params.set('included', filters.includedInHospital);
   if (filters.hospitalStatus) params.set('hospitalStatus', filters.hospitalStatus);
   if (filters.bifimedFundingStatus) params.set('bifimed', filters.bifimedFundingStatus);
@@ -23,10 +28,52 @@ function toUrlSearchParams(filters: CatalogFilters): string {
 
 function normalizeQuery(value: string | string[] | undefined): string {
   if (typeof value === 'string') {
-    return value;
+    return value.trim();
   }
 
   return EMPTY_VALUE;
+}
+
+function parseCommercialized(raw: string): { value: CommercializedValue; isValid: boolean } {
+  if (raw === '') {
+    return { value: '', isValid: true };
+  }
+
+  if (raw === 'COMERCIALIZADO') {
+    return { value: 'COMERCIALIZADO', isValid: true };
+  }
+
+  if (raw === 'NO_COMERCIALIZADO') {
+    return { value: 'NO_COMERCIALIZADO', isValid: true };
+  }
+
+  return { value: 'COMERCIALIZADO', isValid: false };
+}
+
+function parseIncluded(raw: string): 'SI' | 'NO' | undefined {
+  if (raw === 'SI' || raw === 'NO') {
+    return raw;
+  }
+
+  return undefined;
+}
+
+function parseBifimed(raw: string): BifimedValue {
+  if (raw === '' || raw === 'FINANCIADO' || raw === 'NO_FINANCIADO' || raw === 'EN_ESTUDIO') {
+    return raw;
+  }
+
+  return '';
+}
+
+function parsePage(raw: string): number {
+  const parsed = Number(raw);
+
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return 1;
 }
 
 function formatBool(value: boolean): string {
@@ -67,8 +114,11 @@ type PageProps = {
 
 export default async function CatalogPage({ searchParams }: PageProps) {
   const query = await searchParams;
-  const commercializedQuery = normalizeQuery(query.commercialized);
   const hasCommercializedParam = Object.prototype.hasOwnProperty.call(query, 'commercialized');
+  const commercializedRaw = normalizeQuery(query.commercialized);
+  const commercializedParsed = parseCommercialized(commercializedRaw);
+  const commercializedHasValidParam = hasCommercializedParam && commercializedParsed.isValid;
+  const commercializedExplicitAll = commercializedHasValidParam && commercializedParsed.value === '';
 
   const filters: CatalogFilters = {
     q: normalizeQuery(query.q),
@@ -76,21 +126,22 @@ export default async function CatalogPage({ searchParams }: PageProps) {
     cn: normalizeQuery(query.cn),
     laboratory: normalizeQuery(query.laboratory),
     atc: normalizeQuery(query.atc),
-    commercializationStatus: hasCommercializedParam ? commercializedQuery : 'COMERCIALIZADO',
-    includedInHospital:
-      normalizeQuery(query.included) === 'SI'
-        ? 'SI'
-        : normalizeQuery(query.included) === 'NO'
-          ? 'NO'
-          : undefined,
+    commercializationStatus: commercializedHasValidParam ? commercializedParsed.value : 'COMERCIALIZADO',
+    includedInHospital: parseIncluded(normalizeQuery(query.included)),
     hospitalStatus: normalizeQuery(query.hospitalStatus),
-    bifimedFundingStatus: normalizeQuery(query.bifimed),
-    page: Number(normalizeQuery(query.page)) || 1,
+    bifimedFundingStatus: parseBifimed(normalizeQuery(query.bifimed)),
+    page: parsePage(normalizeQuery(query.page)),
   };
 
   const data = await listCatalogByCn(filters);
-  const previousParams = toUrlSearchParams({ ...filters, page: Math.max(data.page - 1, 1) });
-  const nextParams = toUrlSearchParams({ ...filters, page: data.page + 1 });
+  const previousParams = toUrlSearchParams(
+    { ...filters, page: Math.max(data.page - 1, 1) },
+    { forceCommercializedParam: commercializedExplicitAll },
+  );
+  const nextParams = toUrlSearchParams(
+    { ...filters, page: data.page + 1 },
+    { forceCommercializedParam: commercializedExplicitAll },
+  );
 
   return (
     <div className="grid" style={{ gap: 24 }}>

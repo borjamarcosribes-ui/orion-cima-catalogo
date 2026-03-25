@@ -73,6 +73,7 @@ type CatalogSqlRow = {
   laboratory: string | null;
   atcCode: string | null;
   commercializationStatus: string;
+  watchedCn: string | null;
   statusOriginal: string | null;
   shortDescription: string | null;
   fundingStatus: string | null;
@@ -117,6 +118,7 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
         LOWER(n.cn) LIKE ${likeValue}
         OR LOWER(COALESCE(c.officialName, n.officialName, n.presentation)) LIKE ${likeValue}
         OR LOWER(n.presentation) LIKE ${likeValue}
+        OR LOWER(COALESCE(w.shortDescription, '')) LIKE ${likeValue}
       )`,
     );
   }
@@ -147,7 +149,7 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
     return Prisma.sql`1 = 1`;
   }
 
-  return Prisma.sql`${Prisma.join(clauses, Prisma.sql` AND `)}`;
+  return Prisma.join(clauses, ' AND ');
 }
 
 export async function listCatalogByCn(filters: CatalogFilters): Promise<CatalogListResult> {
@@ -166,6 +168,7 @@ export async function listCatalogByCn(filters: CatalogFilters): Promise<CatalogL
       c.laboratory,
       c.atcCode,
       n.commercializationStatus,
+      w.cn AS "watchedCn",
       w.statusOriginal,
       w.shortDescription,
       b.fundingStatus,
@@ -199,7 +202,7 @@ export async function listCatalogByCn(filters: CatalogFilters): Promise<CatalogL
       laboratory: row.laboratory,
       atcCode: row.atcCode,
       commercializationStatus: row.commercializationStatus,
-      includedInHospital: row.statusOriginal !== null,
+      includedInHospital: Boolean(row.watchedCn),
       hospitalStatusOriginal: row.statusOriginal,
       hospitalDescription: row.shortDescription,
       bifimedFundingStatus: row.fundingStatus,
