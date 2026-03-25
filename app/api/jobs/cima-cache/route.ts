@@ -1,0 +1,427 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+import { prisma } from '@/lib/prisma';
+import { runScheduledJob, type ScheduledJobExecutionResult } from '@/lib/scheduled-jobs';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const CIMA_REST_BASE_URL = process.env.CIMA_REST_BASE_URL?.trim() || 'https://cima.aemps.es/cima/rest';
+
+type RefreshScope = 'watched' | 'all';
+
+function isAuthorized(request: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) {
+    throw new Error('Falta CRON_SECRET en el entorno.');
+  }
+
+  const authorization = request.headers.get('authorization');
+  const headerSecret = request.headers.get('x-cron-secret');
+
+  return authorization === `Bearer ${secret}` || headerSecret === secret;
+}
+
+function parseScope(value: string | null): RefreshScope | null {
+  if (value === 'watched' || value === 'all') {
+    return value;
+  }
+
+  return null;
+}
+
+function parsePositiveInt(value: string | null, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function safeString(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return null;
+}
+
+function normalizeBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '1' || normalized === 'true') return true;
+    if (normalized === '0' || normalized === 'false') return false;
+  }
+
+  return null;
+}
+
+function pickMatchingPresentation(medicamento: any, cn: string): any | null {
+  const presentations = Array.isArray(medicamento?.presentaciones) ? medicamento.presentaciones : [];
+  return presentations.find((presentation: any) => safeString(presentation?.cn) === cn) ?? null;
+}
+
+function pickActiveIngredient(medicamento: any, presentation: any): string | null {
+  const direct = safeString(presentation?.pactivos) ?? safeString(medicamento?.pactivos);
+  if (direct) {
+    return direct;
+  }
+
+  const principles = Array.isArray(medicamento?.principiosActivos) ? medicamento.principiosActivos : [];
+  const names = principles
+    .map((principle: any) => safeString(principle?.nombre))
+    .filter((value: string | null): value is string => Boolean(value));
+
+  return names.length > 0 ? names.join(', ') : null;
+}
+
+function pickAtcCode(medicamento: any): string | null {
+  const atcs = Array.isArray(medicamento?.atcs) ? medicamento.atcs : [];
+
+  for (const atc of atcs) {
+    const code = safeString(atc?.codigo);
+    if (code) {
+      return code;
+    }
+  }
+
+  return null;
+}
+
+function pickDocumentUrls(medicamento: any, presentation: any) {
+  const docs =
+    Array.isArray(presentation?.docs) && presentation.docs.length > 0
+      ? presentation.docs
+      : Array.isArray(medicamento?.docs)
+        ? medicamento.docs
+        : [];
+
+  const technicalSheet = docs.find((document: any) => Number(document?.tipo) === 1) ?? null;
+  const leaflet = docs.find((document: any) => Number(document?.tipo) === 2) ?? null;
+
+  return {
+    technicalSheetUrl: safeString(technicalSheet?.url),
+    leafletUrl: safeString(leaflet?.url),
+    htmlUrl: safeString(technicalSheet?.urlHtml) ?? safeString(leaflet?.urlHtml),
+    pdfUrl: safeString(technicalSheet?.url) ?? safeString(leaflet?.url),
+  };
+}
+
+function normalizeCommercializationStatus(medicamento: any, presentation: any): string | null {
+  const commercialized = normalizeBoolean(presentation?.comerc);
+  if (commercialized === true) return 'COMERCIALIZADO';
+  if (commercialized === false) return 'NO_COMERCIALIZADO';
+
+  const medicineCommercialized = normalizeBoolean(medicamento?.comerc);
+  if (medicineCommercialized === true) return 'COMERCIALIZADO';
+  if (medicineCommercialized === false) return 'NO_COMERCIALIZADO';
+
+  return null;
+}
+
+function normalizeSupplyStatus(medicamento: any, presentation: any): string | null {
+  const hasSupplyIssue = normalizeBoolean(presentation?.psum);
+  if (hasSupplyIssue === true) return 'Con problemas de suministro';
+  if (hasSupplyIssue === false) return 'Sin problemas de suministro';
+
+  const medicineSupplyIssue = normalizeBoolean(medicamento?.psum);
+  if (medicineSupplyIssue === true) return 'Con problemas de suministro';
+  if (medicineSupplyIssue === false) return 'Sin problemas de suministro';
+
+  return null;
+}
+
+function normalizeCimaPayload(medicamento: any, cn: string) {
+  const presentation = pickMatchingPresentation(medicamento, cn);
+  const docs = pickDocumentUrls(medicamento, presentation);
+  const now = new Date();
+
+  return {
+    nationalCode: cn,
+    officialName: safeString(presentation?.nombre) ?? safeString(medicamento?.nombre),
+    activeIngredient: pickActiveIngredient(medicamento, presentation),
+    atcCode: pickAtcCode(medicamento),
+    laboratory: safeString(presentation?.labtitular) ?? safeString(medicamento?.labtitular),
+    commercializationStatus: normalizeCommercializationStatus(medicamento, presentation),
+    supplyStatus: normalizeSupplyStatus(medicamento, presentation),
+    technicalSheetUrl: docs.technicalSheetUrl,
+    leafletUrl: docs.leafletUrl,
+    htmlUrl: docs.htmlUrl,
+    pdfUrl: docs.pdfUrl,
+    rawPayload: JSON.stringify(medicamento),
+    fetchedAt: now,
+    updatedAt: now,
+  };
+}
+
+async function fetchMedicamentoByCn(cn: string): Promise<any | null> {
+  const url = new URL(`${CIMA_REST_BASE_URL}/medicamento`);
+  url.searchParams.set('cn', cn);
+
+  const response = await fetch(url, {
+    headers: {
+      accept: 'application/json',
+      'user-agent': 'orion-cima-catalogo/0.1 scheduled-job',
+    },
+    cache: 'no-store',
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`CIMA ${response.status} para CN ${cn}${body ? `: ${body.slice(0, 240)}` : ''}`);
+  }
+
+  const rawText = await response.text();
+  if (!rawText.trim()) {
+    return null;
+  }
+
+  const payload = JSON.parse(rawText);
+
+  if (Array.isArray(payload)) {
+    return payload[0] ?? null;
+  }
+
+  if (Array.isArray(payload?.resultados)) {
+    return payload.resultados[0] ?? null;
+  }
+
+  return payload ?? null;
+}
+
+async function ensureMedicineMasterRow(cn: string, preferredLabel: string | null, now: Date): Promise<void> {
+  try {
+    await prisma.$executeRaw`
+      INSERT INTO "medicines_master" (
+        "nationalCode",
+        "preferredLabel",
+        "firstSeenAt",
+        "lastSeenAt",
+        "isCurrentlyActive",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${cn},
+        ${preferredLabel},
+        ${now},
+        ${now},
+        ${true},
+        ${now},
+        ${now}
+      )
+      ON CONFLICT("nationalCode") DO UPDATE SET
+        "preferredLabel" = COALESCE(excluded."preferredLabel", "medicines_master"."preferredLabel"),
+        "lastSeenAt" = ${now},
+        "updatedAt" = ${now}
+    `;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes('no such table: medicines_master')) {
+      return;
+    }
+
+    throw error;
+  }
+}
+
+async function upsertCimaCacheRow(entry: ReturnType<typeof normalizeCimaPayload>): Promise<void> {
+  await ensureMedicineMasterRow(entry.nationalCode, entry.officialName, entry.updatedAt);
+
+  await prisma.$executeRaw`
+    INSERT INTO "cima_cache" (
+      "nationalCode",
+      "officialName",
+      "activeIngredient",
+      "atcCode",
+      "laboratory",
+      "commercializationStatus",
+      "supplyStatus",
+      "technicalSheetUrl",
+      "leafletUrl",
+      "htmlUrl",
+      "pdfUrl",
+      "rawPayload",
+      "fetchedAt",
+      "updatedAt"
+    )
+    VALUES (
+      ${entry.nationalCode},
+      ${entry.officialName},
+      ${entry.activeIngredient},
+      ${entry.atcCode},
+      ${entry.laboratory},
+      ${entry.commercializationStatus},
+      ${entry.supplyStatus},
+      ${entry.technicalSheetUrl},
+      ${entry.leafletUrl},
+      ${entry.htmlUrl},
+      ${entry.pdfUrl},
+      ${entry.rawPayload},
+      ${entry.fetchedAt},
+      ${entry.updatedAt}
+    )
+    ON CONFLICT("nationalCode") DO UPDATE SET
+      "officialName" = excluded."officialName",
+      "activeIngredient" = excluded."activeIngredient",
+      "atcCode" = excluded."atcCode",
+      "laboratory" = excluded."laboratory",
+      "commercializationStatus" = excluded."commercializationStatus",
+      "supplyStatus" = excluded."supplyStatus",
+      "technicalSheetUrl" = excluded."technicalSheetUrl",
+      "leafletUrl" = excluded."leafletUrl",
+      "htmlUrl" = excluded."htmlUrl",
+      "pdfUrl" = excluded."pdfUrl",
+      "rawPayload" = excluded."rawPayload",
+      "fetchedAt" = excluded."fetchedAt",
+      "updatedAt" = excluded."updatedAt"
+  `;
+}
+
+async function resolveTargetCns(scope: RefreshScope, limit: number, offset: number): Promise<string[]> {
+  if (scope === 'all') {
+    const rows = await prisma.$queryRaw<Array<{ cn: string }>>`
+      SELECT DISTINCT n.cn AS cn
+      FROM nomenclator_products n
+      WHERE n.cn IS NOT NULL AND LENGTH(TRIM(n.cn)) = 6
+      ORDER BY n.cn ASC
+      LIMIT ${limit}
+      OFFSET ${offset}
+    `;
+
+    return rows.map((row) => row.cn);
+  }
+
+  const rows = await prisma.$queryRaw<Array<{ cn: string }>>`
+    SELECT DISTINCT w.cn AS cn
+    FROM watched_medicines w
+    WHERE w.cn IS NOT NULL AND LENGTH(TRIM(w.cn)) = 6
+    ORDER BY w.cn ASC
+    LIMIT ${limit}
+    OFFSET ${offset}
+  `;
+
+  return rows.map((row) => row.cn);
+}
+
+async function executeCimaCacheRefresh(input: {
+  scope: RefreshScope;
+  limit: number;
+  offset: number;
+  delayMs: number;
+}): Promise<ScheduledJobExecutionResult> {
+  const startedAt = Date.now();
+  const targetCns = await resolveTargetCns(input.scope, input.limit, input.offset);
+
+  const failures: Array<{ cn: string; message: string }> = [];
+  let updated = 0;
+  let notFound = 0;
+
+  for (const cn of targetCns) {
+    try {
+      const medicamento = await fetchMedicamentoByCn(cn);
+
+      if (!medicamento) {
+        notFound += 1;
+      } else {
+        const entry = normalizeCimaPayload(medicamento, cn);
+        await upsertCimaCacheRow(entry);
+        updated += 1;
+      }
+    } catch (error) {
+      failures.push({
+        cn,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    if (input.delayMs > 0) {
+      await sleep(input.delayMs);
+    }
+  }
+
+  return {
+    status: failures.length > 0 ? 'completed_with_errors' : 'completed',
+    summary: {
+      scope: input.scope,
+      limit: input.limit,
+      offset: input.offset,
+      totalTargets: targetCns.length,
+      updated,
+      notFound,
+      failed: failures.length,
+      durationMs: Date.now() - startedAt,
+    },
+    errors: failures.length > 0 ? failures.slice(0, 50) : null,
+  };
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    if (!isAuthorized(request)) {
+      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const scope = parseScope(request.nextUrl.searchParams.get('scope')) ?? 'watched';
+    const limit = parsePositiveInt(request.nextUrl.searchParams.get('limit'), scope === 'watched' ? 5000 : 1000);
+    const offset = parsePositiveInt(request.nextUrl.searchParams.get('offset'), 0);
+    const delayMs = parsePositiveInt(request.nextUrl.searchParams.get('delayMs'), 0);
+
+    const jobName = scope === 'all' ? 'CIMA_CACHE_REFRESH_ALL' : 'CIMA_CACHE_REFRESH_WATCHED';
+
+    const response = await runScheduledJob({
+      jobName,
+      triggerType: 'scheduled_http',
+      requestedBy: request.headers.get('user-agent') ?? 'http',
+      idempotencyKey: request.headers.get('x-idempotency-key'),
+      handler: async () =>
+        executeCimaCacheRefresh({
+          scope,
+          limit,
+          offset,
+          delayMs,
+        }),
+    });
+
+    const httpStatus = response.result.status === 'skipped_locked' ? 409 : 200;
+
+    return NextResponse.json(
+      {
+        ok: response.result.status === 'completed' || response.result.status === 'completed_with_errors',
+        runId: response.runId,
+        lockKey: response.lockKey,
+        status: response.result.status,
+        summary: response.result.summary ?? null,
+        errors: response.result.errors ?? null,
+      },
+      { status: httpStatus },
+    );
+  } catch (error) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Error inesperado al ejecutar el refresco de CIMA.',
+      },
+      { status: 500 },
+    );
+  }
+}

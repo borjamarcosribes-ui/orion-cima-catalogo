@@ -1,6 +1,12 @@
 import { prisma } from '@/lib/prisma';
 
-export type AutomationProcessKey = 'NOMENCLATOR' | 'SUPPLY_MONITOR';
+export type AutomationProcessKey =
+  | 'NOMENCLATOR'
+  | 'SUPPLY_MONITOR'
+  | 'CIMA_WATCHED'
+  | 'CIMA_ALL'
+  | 'BIFIMED_ALL';
+
 export type AutomationOriginFilter = 'all' | 'manual' | 'scheduled';
 export type AutomationStatusFilter = 'all' | 'failed';
 
@@ -80,6 +86,18 @@ function formatProcess(jobName: string): { key: AutomationProcessKey; label: str
     return { key: 'NOMENCLATOR', label: 'Nomenclátor' };
   }
 
+  if (jobName === 'CIMA_CACHE_REFRESH_WATCHED') {
+    return { key: 'CIMA_WATCHED', label: 'Caché CIMA (watched)' };
+  }
+
+  if (jobName === 'CIMA_CACHE_REFRESH_ALL') {
+    return { key: 'CIMA_ALL', label: 'Caché CIMA (all)' };
+  }
+
+  if (jobName === 'BIFIMED_CACHE_REFRESH_ALL') {
+    return { key: 'BIFIMED_ALL', label: 'Caché BIFIMED (all)' };
+  }
+
   return { key: 'SUPPLY_MONITOR', label: 'Monitor AEMPS / CIMA' };
 }
 
@@ -114,8 +132,7 @@ function formatStatus(status: string): string {
 
 function summarizeNomenclator(summary: Record<string, unknown>): string {
   const processed = typeof summary.processed === 'number' ? summary.processed : null;
-  const insertedOrUpdated =
-    typeof summary.insertedOrUpdated === 'number' ? summary.insertedOrUpdated : null;
+  const insertedOrUpdated = typeof summary.insertedOrUpdated === 'number' ? summary.insertedOrUpdated : null;
   const discarded = typeof summary.discarded === 'number' ? summary.discarded : null;
   const sourceMode = summary.sourceMode === 'zip_download' ? 'ZIP' : 'XML local';
 
@@ -141,8 +158,7 @@ function summarizeSupplyMonitor(
     }
   >,
 ): string {
-  const supplyMonitorRunId =
-    typeof summary.supplyMonitorRunId === 'string' ? summary.supplyMonitorRunId : null;
+  const supplyMonitorRunId = typeof summary.supplyMonitorRunId === 'string' ? summary.supplyMonitorRunId : null;
   const enriched = supplyMonitorRunId ? supplyMonitorRunById.get(supplyMonitorRunId) : null;
 
   if (enriched) {
@@ -155,6 +171,24 @@ function summarizeSupplyMonitor(
   }
 
   return supplyMonitorRunId ? `Run ${supplyMonitorRunId}` : 'Sin resumen disponible';
+}
+
+function summarizeCacheRefresh(summary: Record<string, unknown>): string {
+  const scope = typeof summary.scope === 'string' ? summary.scope : null;
+  const totalTargets = typeof summary.totalTargets === 'number' ? summary.totalTargets : null;
+  const updated = typeof summary.updated === 'number' ? summary.updated : null;
+  const notFound = typeof summary.notFound === 'number' ? summary.notFound : null;
+  const failed = typeof summary.failed === 'number' ? summary.failed : null;
+
+  const parts = [
+    scope ? `scope=${scope}` : null,
+    totalTargets !== null ? `${totalTargets} objetivos` : null,
+    updated !== null ? `${updated} actualizados` : null,
+    notFound !== null ? `${notFound} no encontrados` : null,
+    failed !== null ? `${failed} fallidos` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(' · ') : 'Sin resumen disponible';
 }
 
 function summarizeRun(
@@ -174,17 +208,39 @@ function summarizeRun(
     return summarizeNomenclator(summary);
   }
 
+  if (
+    jobName === 'CIMA_CACHE_REFRESH_WATCHED' ||
+    jobName === 'CIMA_CACHE_REFRESH_ALL' ||
+    jobName === 'BIFIMED_CACHE_REFRESH_ALL'
+  ) {
+    return summarizeCacheRefresh(summary);
+  }
+
   return summarizeSupplyMonitor(summary, supplyMonitorRunById);
 }
 
 export async function getAutomationDashboardData(limit = 20): Promise<AutomationDashboardData> {
   const now = new Date();
 
-  const [recentRuns, latestNomenclatorRun, latestSupplyMonitorRun, locks] = await Promise.all([
+  const [
+    recentRuns,
+    latestNomenclatorRun,
+    latestSupplyMonitorRun,
+    latestCimaWatchedRun,
+    latestCimaAllRun,
+    latestBifimedAllRun,
+    locks,
+  ] = await Promise.all([
     prisma.scheduledJobRun.findMany({
       where: {
         jobName: {
-          in: ['NOMENCLATOR_UPDATE', 'SUPPLY_MONITOR'],
+          in: [
+            'NOMENCLATOR_UPDATE',
+            'SUPPLY_MONITOR',
+            'CIMA_CACHE_REFRESH_WATCHED',
+            'CIMA_CACHE_REFRESH_ALL',
+            'BIFIMED_CACHE_REFRESH_ALL',
+          ],
         },
       },
       orderBy: {
@@ -200,9 +256,29 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
       where: { jobName: 'SUPPLY_MONITOR' },
       orderBy: { startedAt: 'desc' },
     }),
+    prisma.scheduledJobRun.findFirst({
+      where: { jobName: 'CIMA_CACHE_REFRESH_WATCHED' },
+      orderBy: { startedAt: 'desc' },
+    }),
+    prisma.scheduledJobRun.findFirst({
+      where: { jobName: 'CIMA_CACHE_REFRESH_ALL' },
+      orderBy: { startedAt: 'desc' },
+    }),
+    prisma.scheduledJobRun.findFirst({
+      where: { jobName: 'BIFIMED_CACHE_REFRESH_ALL' },
+      orderBy: { startedAt: 'desc' },
+    }),
     prisma.executionLock.findMany({
       where: {
-        key: { in: ['nomenclator_update', 'supply_monitor'] },
+        key: {
+          in: [
+            'nomenclator_update',
+            'supply_monitor',
+            'cima_cache_refresh_watched',
+            'cima_cache_refresh_all',
+            'bifimed_cache_refresh_all',
+          ],
+        },
         expiresAt: { gte: now },
       },
     }),
@@ -261,16 +337,37 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
           : null,
         status: latestSupplyMonitorRun?.status ?? null,
       },
+      {
+        processKey: 'CIMA_WATCHED',
+        processLabel: 'Caché CIMA (watched)',
+        lastRunAt: latestCimaWatchedRun
+          ? (latestCimaWatchedRun.finishedAt ?? latestCimaWatchedRun.startedAt).toISOString()
+          : null,
+        status: latestCimaWatchedRun?.status ?? null,
+      },
+      {
+        processKey: 'CIMA_ALL',
+        processLabel: 'Caché CIMA (all)',
+        lastRunAt: latestCimaAllRun
+          ? (latestCimaAllRun.finishedAt ?? latestCimaAllRun.startedAt).toISOString()
+          : null,
+        status: latestCimaAllRun?.status ?? null,
+      },
+      {
+        processKey: 'BIFIMED_ALL',
+        processLabel: 'Caché BIFIMED (all)',
+        lastRunAt: latestBifimedAllRun
+          ? (latestBifimedAllRun.finishedAt ?? latestBifimedAllRun.startedAt).toISOString()
+          : null,
+        status: latestBifimedAllRun?.status ?? null,
+      },
     ],
     locks: [
-      {
-        key: 'nomenclator_update',
-        label: 'Nomenclátor',
-      },
-      {
-        key: 'supply_monitor',
-        label: 'Monitor AEMPS / CIMA',
-      },
+      { key: 'nomenclator_update', label: 'Nomenclátor' },
+      { key: 'supply_monitor', label: 'Monitor AEMPS / CIMA' },
+      { key: 'cima_cache_refresh_watched', label: 'Caché CIMA (watched)' },
+      { key: 'cima_cache_refresh_all', label: 'Caché CIMA (all)' },
+      { key: 'bifimed_cache_refresh_all', label: 'Caché BIFIMED (all)' },
     ].map((item) => {
       const lock = activeLockByKey.get(item.key);
 

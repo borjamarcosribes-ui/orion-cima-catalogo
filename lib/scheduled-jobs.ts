@@ -1,6 +1,12 @@
 import { prisma } from '@/lib/prisma';
 
-export type ScheduledJobName = 'NOMENCLATOR_UPDATE' | 'SUPPLY_MONITOR';
+export type ScheduledJobName =
+  | 'NOMENCLATOR_UPDATE'
+  | 'SUPPLY_MONITOR'
+  | 'CIMA_CACHE_REFRESH_WATCHED'
+  | 'CIMA_CACHE_REFRESH_ALL'
+  | 'BIFIMED_CACHE_REFRESH_ALL';
+
 export type ScheduledTriggerType = 'scheduled_http' | 'manual_http' | 'internal';
 export type ScheduledJobStatus = 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'skipped_locked';
 
@@ -13,11 +19,17 @@ export type ScheduledJobExecutionResult = {
 const LOCK_TTLS_MS: Record<ScheduledJobName, number> = {
   NOMENCLATOR_UPDATE: 2 * 60 * 60 * 1000,
   SUPPLY_MONITOR: 60 * 60 * 1000,
+  CIMA_CACHE_REFRESH_WATCHED: 4 * 60 * 60 * 1000,
+  CIMA_CACHE_REFRESH_ALL: 24 * 60 * 60 * 1000,
+  BIFIMED_CACHE_REFRESH_ALL: 24 * 60 * 60 * 1000,
 };
 
 const LOCK_KEYS: Record<ScheduledJobName, string> = {
   NOMENCLATOR_UPDATE: 'nomenclator_update',
   SUPPLY_MONITOR: 'supply_monitor',
+  CIMA_CACHE_REFRESH_WATCHED: 'cima_cache_refresh_watched',
+  CIMA_CACHE_REFRESH_ALL: 'cima_cache_refresh_all',
+  BIFIMED_CACHE_REFRESH_ALL: 'bifimed_cache_refresh_all',
 };
 
 export function getScheduledJobLockKey(jobName: ScheduledJobName): string {

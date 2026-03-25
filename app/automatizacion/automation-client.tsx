@@ -12,7 +12,7 @@ type AutomationClientProps = {
   data: AutomationDashboardData;
 };
 
-type ProcessFilter = 'ALL' | 'NOMENCLATOR' | 'SUPPLY_MONITOR';
+type ProcessFilter = 'ALL' | 'NOMENCLATOR' | 'SUPPLY_MONITOR' | 'CIMA_WATCHED' | 'CIMA_ALL';
 
 function formatDateTime(value: string | null): string {
   if (!value) {
@@ -80,7 +80,7 @@ export default function AutomationClient({ data }: AutomationClientProps) {
               <div className="badge primary">Automatización</div>
               <h1 style={{ marginBottom: 8 }}>Histórico de ejecuciones</h1>
               <p className="muted" style={{ margin: 0 }}>
-                Trazabilidad operativa de los procesos automáticos de Nomenclátor y del monitor AEMPS / CIMA.
+                Trazabilidad operativa de Nomenclátor, monitor AEMPS / CIMA y refrescos de caché CIMA.
               </p>
             </div>
           </div>
@@ -132,6 +132,8 @@ export default function AutomationClient({ data }: AutomationClientProps) {
             <option value="ALL">Todos</option>
             <option value="NOMENCLATOR">Nomenclátor</option>
             <option value="SUPPLY_MONITOR">Monitor AEMPS / CIMA</option>
+            <option value="CIMA_WATCHED">Caché CIMA (watched)</option>
+            <option value="CIMA_ALL">Caché CIMA (all)</option>
           </select>
           <select onChange={(event) => setOriginFilter(event.target.value as AutomationOriginFilter)} value={originFilter}>
             <option value="all">Todos los orígenes</option>
