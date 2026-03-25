@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "import:nomenclator": "node scripts/import-nomenclator.cjs",
-    "backfill:cima": "node scripts/backfill-cima-cache.mjs"
+    "backfill:cima": "node scripts/backfill-cima-cache.mjs",
+    "backfill:bifimed": "node scripts/backfill-bifimed-cache.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.6.0",

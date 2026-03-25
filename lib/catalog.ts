@@ -58,6 +58,14 @@ export type CatalogDetail = {
   bifimedFundingStatus: string | null;
   bifimedSummary: string | null;
   bifimedModality: string | null;
+  bifimedRestrictedConditions: string | null;
+  bifimedSpecialFundingConditions: string | null;
+  bifimedNomenclatorState: string | null;
+  bifimedIndications: Array<{
+    authorizedIndication: string;
+    indicationFileStatus: string | null;
+    indicationFundingResolution: string | null;
+  }>;
   technicalSheetUrl: string | null;
   leafletUrl: string | null;
   docsHtmlUrl: string | null;
@@ -251,7 +259,7 @@ export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | 
     return null;
   }
 
-  const [nomenclator, cima, watched, lastImport, bifimed] = await Promise.all([
+  const [nomenclator, cima, watched, lastImport, bifimed, bifimedIndications] = await Promise.all([
     prisma.nomenclatorProduct.findUnique({
       where: { cn: normalizedCn },
     }),
@@ -268,6 +276,10 @@ export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | 
     }),
     prisma.bifimedCache.findUnique({
       where: { cn: normalizedCn },
+    }),
+    prisma.bifimedIndicationCache.findMany({
+      where: { cn: normalizedCn },
+      orderBy: { sortOrder: 'asc' },
     }),
   ]);
 
@@ -294,6 +306,14 @@ export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | 
     bifimedFundingStatus: bifimed?.fundingStatus ?? null,
     bifimedSummary: bifimed?.summary ?? null,
     bifimedModality: bifimed?.fundingModality ?? null,
+    bifimedRestrictedConditions: bifimed?.restrictedConditions ?? null,
+    bifimedSpecialFundingConditions: bifimed?.specialFundingConditions ?? null,
+    bifimedNomenclatorState: bifimed?.nomenclatorState ?? null,
+    bifimedIndications: bifimedIndications.map((item) => ({
+      authorizedIndication: item.authorizedIndication,
+      indicationFileStatus: item.indicationFileStatus ?? null,
+      indicationFundingResolution: item.indicationFundingResolution ?? null,
+    })),
     technicalSheetUrl: cima?.technicalSheetUrl ?? null,
     leafletUrl: cima?.leafletUrl ?? null,
     docsHtmlUrl: cima?.htmlUrl ?? null,

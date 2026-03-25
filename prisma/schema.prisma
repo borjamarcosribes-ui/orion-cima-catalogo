@@ -262,15 +262,34 @@ model NomenclatorProduct {
 }
 
 model BifimedCache {
-  cn              String   @id
-  fundingStatus   String
-  fundingModality String?
-  summary         String?
-  rawPayload      String?
-  updatedAt       DateTime @updatedAt
+  cn                       String                   @id
+  fundingStatus            String
+  fundingModality          String?
+  restrictedConditions     String?
+  specialFundingConditions String?
+  nomenclatorState         String?
+  summary                  String?
+  rawPayload               String?
+  updatedAt                DateTime                 @updatedAt
+  indications              BifimedIndicationCache[]
 
   @@index([fundingStatus])
   @@map("bifimed_cache")
+}
+
+model BifimedIndicationCache {
+  id                          String       @id @default(cuid())
+  cn                          String
+  sortOrder                   Int
+  authorizedIndication        String
+  indicationFileStatus        String?
+  indicationFundingResolution String?
+  rawPayload                  String?
+  updatedAt                   DateTime     @updatedAt
+  bifimed                     BifimedCache @relation(fields: [cn], references: [cn], onDelete: Cascade)
+
+  @@index([cn, sortOrder])
+  @@map("bifimed_indication_cache")
 }
 
 model ScheduledJobRun {

@@ -151,8 +151,20 @@ export default async function CatalogDetailPage({ params }: PageProps) {
             <div>{detail.bifimedFundingStatus ?? 'En estudio'}</div>
           </div>
           <div>
-            <small className="muted">Modalidad</small>
+            <small className="muted">Situación de financiación</small>
             <div>{detail.bifimedModality ?? 'Sin dato BIFIMED'}</div>
+          </div>
+          <div>
+            <small className="muted">Condiciones financiación restringidas</small>
+            <div>{detail.bifimedRestrictedConditions ?? 'Sin dato BIFIMED'}</div>
+          </div>
+          <div>
+            <small className="muted">Condiciones especiales de financiación</small>
+            <div>{detail.bifimedSpecialFundingConditions ?? 'Sin dato BIFIMED'}</div>
+          </div>
+          <div>
+            <small className="muted">Estado de nomenclátor</small>
+            <div>{detail.bifimedNomenclatorState ?? 'Sin dato BIFIMED'}</div>
           </div>
           <div style={{ gridColumn: '1 / -1' }}>
             <small className="muted">Resumen</small>
@@ -161,8 +173,73 @@ export default async function CatalogDetailPage({ params }: PageProps) {
         </div>
       </section>
 
+      <section className="card">
+        <div className="section-title">
+          <h2>Indicaciones BIFIMED</h2>
+          <span className="badge">Detalle por indicación</span>
+        </div>
+
+        {detail.bifimedIndications.length === 0 ? (
+          <p className="muted">No hay detalle BIFIMED por indicación persistido para este CN.</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      borderBottom: '1px solid #d9dde3',
+                    }}
+                  >
+                    Indicación autorizada
+                  </th>
+                  <th
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      borderBottom: '1px solid #d9dde3',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Situación expediente indicación
+                  </th>
+                  <th
+                    style={{
+                      textAlign: 'left',
+                      padding: '10px 12px',
+                      borderBottom: '1px solid #d9dde3',
+                    }}
+                  >
+                    Resolución expediente de financiación indicación
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.bifimedIndications.map((item, index) => (
+                  <tr key={`${detail.cn}-${index}`}>
+                    <td style={{ verticalAlign: 'top', padding: '10px 12px', borderBottom: '1px solid #eceff3' }}>
+                      {item.authorizedIndication}
+                    </td>
+                    <td style={{ verticalAlign: 'top', padding: '10px 12px', borderBottom: '1px solid #eceff3' }}>
+                      {item.indicationFileStatus ?? 'Sin dato'}
+                    </td>
+                    <td style={{ verticalAlign: 'top', padding: '10px 12px', borderBottom: '1px solid #eceff3' }}>
+                      {item.indicationFundingResolution ?? 'Sin dato'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
       <div>
-        <Link href="/catalogo" className="secondary-button">Volver al catálogo</Link>
+        <Link href="/catalogo" className="secondary-button">
+          Volver al catálogo
+        </Link>
       </div>
     </div>
   );
