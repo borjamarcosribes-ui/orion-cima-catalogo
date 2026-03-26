@@ -68,8 +68,13 @@ export type CatalogDetail = {
   }>;
   technicalSheetUrl: string | null;
   leafletUrl: string | null;
+  leafletHtmlUrl: string | null;
   docsHtmlUrl: string | null;
   docsPdfUrl: string | null;
+  cimaCharacteristics: Array<{
+    label: string;
+    normalizedLabel: string;
+  }>;
 };
 
 type CatalogSqlRow = {
@@ -259,7 +264,7 @@ export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | 
     return null;
   }
 
-  const [nomenclator, cima, watched, lastImport, bifimed, bifimedIndications] = await Promise.all([
+  const [nomenclator, cima, watched, lastImport, bifimed, bifimedIndications, cimaCharacteristics] = await Promise.all([
     prisma.nomenclatorProduct.findUnique({
       where: { cn: normalizedCn },
     }),
@@ -279,6 +284,10 @@ export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | 
     }),
     prisma.bifimedIndicationCache.findMany({
       where: { cn: normalizedCn },
+      orderBy: { sortOrder: 'asc' },
+    }),
+    prisma.cimaCharacteristicCache.findMany({
+      where: { nationalCode: normalizedCn },
       orderBy: { sortOrder: 'asc' },
     }),
   ]);
@@ -316,7 +325,12 @@ export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | 
     })),
     technicalSheetUrl: cima?.technicalSheetUrl ?? null,
     leafletUrl: cima?.leafletUrl ?? null,
+    leafletHtmlUrl: cima?.leafletHtmlUrl ?? null,
     docsHtmlUrl: cima?.htmlUrl ?? null,
     docsPdfUrl: cima?.pdfUrl ?? null,
+    cimaCharacteristics: cimaCharacteristics.map((item) => ({
+      label: item.label,
+      normalizedLabel: item.normalizedLabel,
+    })),
   };
 }

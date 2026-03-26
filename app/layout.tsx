@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import { NavLink } from '@/components/nav-link';
 
 export const metadata: Metadata = {
-  title: 'Orion + CIMA | Catálogo operativo',
-  description: 'Primera iteración del catálogo operativo de Farmacia a partir de Orion y CIMA.',
+  title: 'Integramécum | Catálogo integrado',
+  description: 'Catálogo Integrado CIMA + BIFIMED + Orion Logis.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -12,17 +12,22 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="es">
       <body>
         <header className="header">
-          <div className="nav">
-            <div>
-              <strong>Orion + CIMA</strong>
-              <div className="muted">Catálogo operativo de Farmacia Hospitalaria</div>
+          <div className="nav" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <strong style={{ fontSize: '1.5rem', lineHeight: 1.1 }}>Integramécum</strong>
+              <div className="muted">Catálogo Integrado CIMA + BIFIMED + Orion Logis</div>
             </div>
-            <nav className="nav-links" aria-label="Principal">
-              <NavLink href="/">Dashboard</NavLink>
-              <NavLink href="/importaciones">Importaciones</NavLink>
-              <NavLink href="/catalogo">Catálogo operativo</NavLink>
-              <NavLink href="/suministro">Suministro</NavLink>
-              <NavLink href="/automatizacion">Automatización</NavLink>
+
+            <nav
+              className="nav-links"
+              aria-label="Principal"
+              style={{ display: 'flex', flexWrap: 'nowrap', gap: 16, whiteSpace: 'nowrap', overflowX: 'auto' }}
+            >
+              <NavLink href="/">Inicio</NavLink>
+              <NavLink href="/importaciones">Importación Orion Logis</NavLink>
+              <NavLink href="/catalogo">CIMA Integrada</NavLink>
+              <NavLink href="/suministro">Gestor de Roturas</NavLink>
+              <NavLink href="/automatizacion">Panel de Automatizaciones</NavLink>
             </nav>
           </div>
         </header>

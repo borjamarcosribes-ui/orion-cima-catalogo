@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, useTransition, type ChangeEvent } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type {
@@ -50,6 +50,8 @@ const initialState: LoadState = {
   preview: null,
   fileError: null,
 };
+
+const HISTORY_PAGE_SIZE = 10;
 
 function buildPreviewStateFromPersistedImport(importData: PersistedTsvImportPreview): PreviewState {
   return {
@@ -165,7 +167,20 @@ function ItemsPreviewTable({ items }: { items: OrionCatalogItem[] }) {
   );
 }
 
-function ImportHistory({ history }: { history: PersistedTsvImportHistoryEntry[] }) {
+function ImportHistory({
+  history,
+  currentPage,
+  onPageChange,
+}: {
+  history: PersistedTsvImportHistoryEntry[];
+  currentPage: number;
+  onPageChange: (page: number) => void;
+}) {
+  const pageCount = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const safeCurrentPage = Math.min(Math.max(currentPage, 1), pageCount);
+  const startIndex = (safeCurrentPage - 1) * HISTORY_PAGE_SIZE;
+  const visibleHistory = history.slice(startIndex, startIndex + HISTORY_PAGE_SIZE);
+
   return (
     <section className="card">
       <div className="section-title">
@@ -175,34 +190,60 @@ function ImportHistory({ history }: { history: PersistedTsvImportHistoryEntry[] 
       {history.length === 0 ? (
         <p className="muted">Todavía no hay importaciones TSV guardadas.</p>
       ) : (
-        <div className="table-scroll">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Fecha/hora</th>
-                <th>Fichero</th>
-                <th>Filas</th>
-                <th>Items válidos</th>
-                <th>Duplicados</th>
-                <th>Warnings</th>
-                <th>Errors</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((entry) => (
-                <tr key={entry.id}>
-                  <td>{formatImportedAt(entry.importedAt)}</td>
-                  <td>{entry.fileName}</td>
-                  <td>{entry.rowCount}</td>
-                  <td>{entry.validItems}</td>
-                  <td>{entry.duplicateCount}</td>
-                  <td>{entry.warningCount}</td>
-                  <td>{entry.errorCount}</td>
+        <>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Fecha/hora</th>
+                  <th>Fichero</th>
+                  <th>Filas</th>
+                  <th>Items válidos</th>
+                  <th>Duplicados</th>
+                  <th>Warnings</th>
+                  <th>Errors</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {visibleHistory.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{formatImportedAt(entry.importedAt)}</td>
+                    <td>{entry.fileName}</td>
+                    <td>{entry.rowCount}</td>
+                    <td>{entry.validItems}</td>
+                    <td>{entry.duplicateCount}</td>
+                    <td>{entry.warningCount}</td>
+                    <td>{entry.errorCount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {pageCount > 1 ? (
+            <div className="actions-row" style={{ marginTop: 16 }}>
+              <button
+                className="secondary-button"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => onPageChange(safeCurrentPage - 1)}
+                type="button"
+              >
+                Anteriores
+              </button>
+              <span className="muted">
+                Página {safeCurrentPage} de {pageCount}
+              </span>
+              <button
+                className="secondary-button"
+                disabled={safeCurrentPage >= pageCount}
+                onClick={() => onPageChange(safeCurrentPage + 1)}
+                type="button"
+              >
+                Siguientes
+              </button>
+            </div>
+          ) : null}
+        </>
       )}
     </section>
   );
@@ -224,8 +265,13 @@ export default function ImportsClient({
       : initialState,
   );
   const [history, setHistory] = useState(initialHistory);
+  const [historyPage, setHistoryPage] = useState(1);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setHistory(initialHistory);
+  }, [initialHistory]);
 
   useEffect(() => {
     if (initialPersistedImport) {
@@ -241,6 +287,12 @@ export default function ImportsClient({
       currentState.status === 'ready' && currentState.preview.source === 'local' ? currentState : initialState,
     );
   }, [initialPersistedImport]);
+
+  const pageCount = useMemo(() => Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE)), [history]);
+
+  useEffect(() => {
+    setHistoryPage((currentPage) => Math.min(currentPage, pageCount));
+  }, [pageCount]);
 
   const preview = loadState.preview;
   const result = preview?.result ?? null;
@@ -306,6 +358,7 @@ export default function ImportsClient({
     startTransition(async () => {
       const response = await saveImportAction(payload);
       setHistory(response.history);
+      setHistoryPage(1);
 
       if (response.ok) {
         setSaveMessage(`Importación guardada: ${response.savedImport.fileName}.`);
@@ -323,14 +376,12 @@ export default function ImportsClient({
         <div className="section-title">
           <div>
             <div className="badge primary">Importaciones</div>
-            <h1>Importación TSV Orion con vista previa</h1>
+            <h1>Importación de archivo .tsv de Orion Logis con vista previa</h1>
           </div>
-          <span className="badge success">Persistencia básica activada</span>
         </div>
         <p className="muted">
-          Sube un fichero TSV de catálogo Orion para parsearlo en cliente con{' '}
-          <small className="code-inline">parseOrionCatalogTsv</small>, revisa el resultado y guarda la importación de
-          forma explícita en base de datos.
+          Sube un fichero .tsv resultante de la exportación de la Consulta de Catálogo de Artículos, en Orion Logis.
+          Revisa el resultado y guarda la importación para almacenarla en base de datos.
         </p>
 
         <label className="file-picker" htmlFor="orion-tsv-input">
@@ -425,7 +476,7 @@ export default function ImportsClient({
         </>
       ) : null}
 
-      <ImportHistory history={history} />
+      <ImportHistory history={history} currentPage={historyPage} onPageChange={setHistoryPage} />
     </div>
   );
 }

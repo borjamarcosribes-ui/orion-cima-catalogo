@@ -1,147 +1,353 @@
-import { MetricCard } from '@/components/metric-card';
-import { cimaIntegrationChecklist, dashboardMetrics, importConfigTemplate, sampleRows, snapshotDiff } from '@/lib/demo-data';
+import { prisma } from '@/lib/prisma';
 
-export default function DashboardPage() {
+export const dynamic = 'force-dynamic';
+
+type CountRow = {
+  totalIncluded: bigint | number | string | null;
+  totalActive: bigint | number | string | null;
+  totalLab: bigint | number | string | null;
+  totalInactive: bigint | number | string | null;
+  totalOther: bigint | number | string | null;
+};
+
+type ActiveIssueRow = {
+  totalActiveShortages: bigint | number | string | null;
+  activeStatusShortages: bigint | number | string | null;
+  labStatusShortages: bigint | number | string | null;
+};
+
+type ActiveShortageRow = {
+  cn: string;
+  displayName: string | null;
+  hospitalStatusOriginal: string | null;
+  startedAt: Date | string | null;
+};
+
+type EnrichedActiveShortageRow = {
+  cn: string;
+  displayName: string | null;
+  hospitalStatusOriginal: string | null;
+  daysInIssue: number;
+};
+
+function toNumber(value: bigint | number | string | null | undefined): number {
+  if (typeof value === 'bigint') {
+    return Number(value);
+  }
+
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  return 0;
+}
+
+function formatPercent(numerator: number, denominator: number): string {
+  if (denominator <= 0) {
+    return '0 %';
+  }
+
+  return `${((numerator / denominator) * 100).toFixed(1)} %`;
+}
+
+function formatDays(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0 días';
+  }
+
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded.toLocaleString('es-ES', {
+    minimumFractionDigits: rounded % 1 === 0 ? 0 : 1,
+    maximumFractionDigits: 1,
+  })} días`;
+}
+
+function toDate(value: Date | string | null): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function calculateDaysInIssue(startedAt: Date | string | null, now: Date): number {
+  const started = toDate(startedAt);
+  if (!started) {
+    return 0;
+  }
+
+  const diffMs = now.getTime() - started.getTime();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) {
+    return 0;
+  }
+
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+export default async function DashboardPage() {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+  const [counts, activeIssues, activeShortages, recentEvents] = await Promise.all([
+    prisma.$queryRaw<CountRow[]>`
+      SELECT
+        COUNT(*) AS totalIncluded,
+        SUM(CASE WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) = 'ACTIVO' THEN 1 ELSE 0 END) AS totalActive,
+        SUM(CASE WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) = 'LAB' THEN 1 ELSE 0 END) AS totalLab,
+        SUM(CASE WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) = 'INACTIVO' THEN 1 ELSE 0 END) AS totalInactive,
+        SUM(
+          CASE
+            WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) NOT IN ('ACTIVO', 'LAB', 'INACTIVO')
+            THEN 1
+            ELSE 0
+          END
+        ) AS totalOther
+      FROM watched_medicines
+      WHERE cn IS NOT NULL AND LENGTH(TRIM(cn)) = 6
+    `,
+    prisma.$queryRaw<ActiveIssueRow[]>`
+      SELECT
+        SUM(CASE WHEN s.hasActiveSupplyIssue = 1 THEN 1 ELSE 0 END) AS totalActiveShortages,
+        SUM(
+          CASE
+            WHEN s.hasActiveSupplyIssue = 1
+             AND UPPER(TRIM(COALESCE(w.statusNormalized, ''))) = 'ACTIVO'
+            THEN 1
+            ELSE 0
+          END
+        ) AS activeStatusShortages,
+        SUM(
+          CASE
+            WHEN s.hasActiveSupplyIssue = 1
+             AND UPPER(TRIM(COALESCE(w.statusNormalized, ''))) = 'LAB'
+            THEN 1
+            ELSE 0
+          END
+        ) AS labStatusShortages
+      FROM watched_medicines w
+      LEFT JOIN supply_statuses s ON s.watchedMedicineId = w.id
+      WHERE w.cn IS NOT NULL AND LENGTH(TRIM(w.cn)) = 6
+    `,
+    prisma.$queryRaw<ActiveShortageRow[]>`
+      SELECT
+        w.cn AS cn,
+        COALESCE(c.officialName, n.officialName, n.presentation, w.shortDescription) AS displayName,
+        w.statusOriginal AS hospitalStatusOriginal,
+        s.startedAt AS startedAt
+      FROM supply_statuses s
+      INNER JOIN watched_medicines w ON w.id = s.watchedMedicineId
+      LEFT JOIN nomenclator_products n ON n.cn = w.cn
+      LEFT JOIN cima_cache c ON c.nationalCode = w.cn
+      WHERE s.hasActiveSupplyIssue = 1
+        AND s.startedAt IS NOT NULL
+        AND w.cn IS NOT NULL
+        AND LENGTH(TRIM(w.cn)) = 6
+    `,
+    prisma.supplyMonitoringEvent.findMany({
+      where: {
+        createdAt: {
+          gte: sevenDaysAgo,
+        },
+        watchedMedicine: {
+          is: {
+            isWatched: true,
+          },
+        },
+      },
+      select: {
+        eventType: true,
+      },
+    }),
+  ]);
+
+  const now = new Date();
+
+  const countRow = counts[0];
+  const activeIssueRow = activeIssues[0];
+
+  const totalIncluded = toNumber(countRow?.totalIncluded);
+  const totalActive = toNumber(countRow?.totalActive);
+  const totalLab = toNumber(countRow?.totalLab);
+  const totalInactive = toNumber(countRow?.totalInactive);
+  const totalOther = toNumber(countRow?.totalOther);
+
+  const totalActiveShortages = toNumber(activeIssueRow?.totalActiveShortages);
+  const activeStatusShortages = toNumber(activeIssueRow?.activeStatusShortages);
+  const labStatusShortages = toNumber(activeIssueRow?.labStatusShortages);
+
+  const newIssues7d = recentEvents.filter((event) => event.eventType === 'NEW_ISSUE').length;
+  const resolvedIssues7d = recentEvents.filter((event) => event.eventType === 'RESOLVED').length;
+
+  const enrichedActiveShortages: EnrichedActiveShortageRow[] = activeShortages
+    .map((item) => ({
+      cn: item.cn,
+      displayName: item.displayName,
+      hospitalStatusOriginal: item.hospitalStatusOriginal,
+      daysInIssue: calculateDaysInIssue(item.startedAt, now),
+    }))
+    .sort((a, b) => b.daysInIssue - a.daysInIssue || a.cn.localeCompare(b.cn));
+
+  const averageAge =
+    enrichedActiveShortages.length > 0
+      ? enrichedActiveShortages.reduce((sum, item) => sum + item.daysInIssue, 0) / enrichedActiveShortages.length
+      : 0;
+
+  const longestShortages = enrichedActiveShortages.slice(0, 10);
+
   return (
     <div className="grid" style={{ gap: 24 }}>
-      <section className="hero">
-        <div className="hero-panel">
-          <div className="badge success">Segunda iteración: limpieza conceptual y consistencia interna</div>
-          <h1>Catálogo operativo Orion + CIMA</h1>
-          <p>
-            La base actual sigue siendo una demo funcional del dominio: valida códigos Orion con patrón{' '}
-            <span className="code">^\d{'{6}'}\.CNA$</span>, separa filas válidas y descartadas, y construye un
-            snapshot conceptual de <strong>CN únicos por batch</strong>.
-          </p>
-          <div className="kpi-row">
-            <div className="kpi-chip">
-              <strong>Mapeo configurable</strong>
-              <div>Sin fijar columnas definitivas del Excel real.</div>
-            </div>
-            <div className="kpi-chip">
-              <strong>Snapshot definido</strong>
-              <div>CN únicos por batch, deduplicados sobre filas válidas.</div>
-            </div>
-            <div className="kpi-chip">
-              <strong>CIMA pendiente</strong>
-              <div>Solo modelo y checklist, sin integración real todavía.</div>
-            </div>
+      <section className="card">
+        <div className="section-title">
+          <div>
+            <h1>Bienvenid@ a Integramécum</h1>
           </div>
         </div>
-        <aside className="card">
-          <div className="section-title">
-            <h2>Configuración demo del importador</h2>
-            <span className="badge warning">Pendiente XLS real</span>
-          </div>
-          <ul className="list">
-            <li>
-              <strong>Columna de código Orion</strong>
-              <div className="muted">{importConfigTemplate.codeColumn}</div>
-            </li>
-            <li>
-              <strong>Columna de descripción</strong>
-              <div className="muted">{importConfigTemplate.descriptionColumn}</div>
-            </li>
-            <li>
-              <strong>Hoja por defecto</strong>
-              <div className="muted">{importConfigTemplate.sheetName}</div>
-            </li>
-          </ul>
-        </aside>
+
+        <p className="muted" style={{ marginBottom: 10 }}>
+          Aplicación operativa para Farmacia Hospitalaria que integra catálogo local Orion, nomenclátor, CIMA,
+          BIFIMED y monitor de suministro.
+        </p>
+        <p className="muted" style={{ margin: 0 }}>
+          Esta pantalla ofrece una visión general del estado del catálogo hospitalario y de las incidencias activas de
+          suministro sobre los medicamentos incluidos en el hospital.
+        </p>
       </section>
 
       <section className="grid cols-3">
-        <MetricCard label="Filas válidas" value={dashboardMetrics.latestValidRows} hint="Filas del batch que cumplen exactamente ^\d{6}\.CNA$." />
-        <MetricCard label="CN únicos en snapshot" value={dashboardMetrics.latestUniqueNationalCodes} hint="medicines_snapshot se interpreta como CN únicos por batch." />
-        <MetricCard label="Descartadas" value={dashboardMetrics.latestDiscardedRows} hint="Filas sin .CNA o con formato no válido." />
+        <article className="card">
+          <div className="muted">Productos incluidos en hospital</div>
+          <div className="metric" style={{ fontSize: '2rem' }}>
+            {totalIncluded.toLocaleString('es-ES')}
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="muted">Roturas activas</div>
+          <div className="metric" style={{ fontSize: '2rem' }}>
+            {totalActiveShortages.toLocaleString('es-ES')}
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="muted">% rotura entre incluidos</div>
+          <div className="metric" style={{ fontSize: '2rem' }}>
+            {formatPercent(totalActiveShortages, totalIncluded)}
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="muted">% rotura entre ACTIVO</div>
+          <div className="metric" style={{ fontSize: '2rem' }}>
+            {formatPercent(activeStatusShortages, totalActive)}
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="muted">% rotura entre LAB</div>
+          <div className="metric" style={{ fontSize: '2rem' }}>
+            {formatPercent(labStatusShortages, totalLab)}
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="muted">Antigüedad media de incidencias activas</div>
+          <div className="metric" style={{ fontSize: '2rem' }}>{formatDays(averageAge)}</div>
+        </article>
       </section>
 
-      <section className="grid cols-2">
+      <section className="grid cols-3">
         <article className="card">
-          <div className="section-title">
-            <h2>Filas demo de la última carga</h2>
-            <span className="badge primary">Batch de ejemplo</span>
+          <div className="muted">Nuevas roturas últimos 7 días</div>
+          <div className="metric" style={{ fontSize: '1.8rem' }}>
+            {newIssues7d.toLocaleString('es-ES')}
           </div>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Fila</th>
-                <th>Código Orion</th>
-                <th>CN</th>
-                <th>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sampleRows.map((row) => (
-                <tr key={`${row.rowNumber}-${row.orionCode || 'sin-codigo'}`}>
-                  <td>{row.rowNumber}</td>
-                  <td><small className="code-inline">{row.orionCode || '—'}</small></td>
-                  <td>{row.nationalCode ?? '—'}</td>
-                  <td>
-                    {row.isValidMedicine ? (
-                      <span className="badge success">Válido</span>
-                    ) : (
-                      <span className="badge danger">{row.discardReason}</span>
-                    )}
-                  </td>
+        </article>
+
+        <article className="card">
+          <div className="muted">Roturas resueltas últimos 7 días</div>
+          <div className="metric" style={{ fontSize: '1.8rem' }}>
+            {resolvedIssues7d.toLocaleString('es-ES')}
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="muted">Productos ACTIVO en rotura</div>
+          <div className="metric" style={{ fontSize: '1.8rem' }}>
+            {activeStatusShortages.toLocaleString('es-ES')}
+          </div>
+        </article>
+      </section>
+
+      <section className="card">
+        <div className="section-title">
+          <h2>Productos con mayor tiempo en rotura</h2>
+          <span className="badge primary">Top 10</span>
+        </div>
+
+        {longestShortages.length === 0 ? (
+          <p className="muted">No hay incidencias activas con fecha de inicio registrada.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>CN</th>
+                  <th>Medicamento</th>
+                  <th>Estado hospitalario</th>
+                  <th>Días en rotura</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </article>
-
-        <article className="card">
-          <div className="section-title">
-            <h2>Cambios por CN frente al batch anterior</h2>
-            <span className="badge primary">Diff por presencia de CN</span>
+              </thead>
+              <tbody>
+                {longestShortages.map((item) => (
+                  <tr key={item.cn}>
+                    <td>{item.cn}</td>
+                    <td>{item.displayName ?? 'Sin descripción'}</td>
+                    <td>{item.hospitalStatusOriginal ?? 'Sin dato Orion'}</td>
+                    <td>{item.daysInIssue.toLocaleString('es-ES')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <ul className="list">
-            <li>
-              <strong>Añadidos</strong>
-              <div className="muted">{snapshotDiff.added.join(', ') || 'Sin cambios'}</div>
-            </li>
-            <li>
-              <strong>Eliminados</strong>
-              <div className="muted">{snapshotDiff.removed.join(', ') || 'Sin cambios'}</div>
-            </li>
-            <li>
-              <strong>Sin cambios</strong>
-              <div className="muted">{snapshotDiff.unchanged.join(', ') || 'Sin coincidencias'}</div>
-            </li>
-            <li>
-              <strong>Limitación actual</strong>
-              <div className="muted">El diff no detecta cambios de descripción para un mismo CN; solo altas, bajas y permanencias por Código Nacional.</div>
-            </li>
-          </ul>
-        </article>
+        )}
       </section>
 
       <section className="grid cols-2">
         <article className="card">
-          <div className="section-title">
-            <h2>Base preparada para CIMA</h2>
-            <span className="badge success">Modelo listo, integración no implementada</span>
+          <div className="muted">ACTIVO</div>
+          <div className="metric" style={{ fontSize: '1.8rem' }}>
+            {totalActive.toLocaleString('es-ES')}
           </div>
-          <ul className="list">
-            {cimaIntegrationChecklist.map((item) => (
-              <li key={item.objective}>
-                <strong>{item.objective}</strong>
-                <div className="muted">{item.notes}</div>
-              </li>
-            ))}
-          </ul>
         </article>
 
         <article className="card">
-          <div className="section-title">
-            <h2>Validaciones pendientes con el XLS real</h2>
-            <span className="badge warning">Pendiente</span>
+          <div className="muted">LAB</div>
+          <div className="metric" style={{ fontSize: '1.8rem' }}>
+            {totalLab.toLocaleString('es-ES')}
           </div>
-          <ul className="list">
-            <li>Confirmar nombres exactos de las columnas exportadas desde Orion.</li>
-            <li>Verificar si conviene conservar más campos brutos para auditoría y trazabilidad.</li>
-            <li>Validar si habrá múltiples pestañas por exportación y qué mapeos reales necesita cada una.</li>
-          </ul>
+        </article>
+
+        <article className="card">
+          <div className="muted">INACTIVO</div>
+          <div className="metric" style={{ fontSize: '1.8rem' }}>
+            {totalInactive.toLocaleString('es-ES')}
+          </div>
+        </article>
+
+        <article className="card">
+          <div className="muted">Otros estados</div>
+          <div className="metric" style={{ fontSize: '1.8rem' }}>
+            {totalOther.toLocaleString('es-ES')}
+          </div>
         </article>
       </section>
     </div>

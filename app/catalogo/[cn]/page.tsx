@@ -116,6 +116,20 @@ export default async function CatalogDetailPage({ params }: PageProps) {
             <small className="muted">Código DCP</small>
             <div>{detail.codDcp}</div>
           </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <small className="muted">Características</small>
+            {detail.cimaCharacteristics.length === 0 ? (
+              <div>Sin características CIMA persistidas</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                {detail.cimaCharacteristics.map((item) => (
+                  <span key={item.normalizedLabel} className="badge">
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
@@ -128,10 +142,10 @@ export default async function CatalogDetailPage({ params }: PageProps) {
           Estos enlaces dependen de que la caché local CIMA tenga cargados los campos documentales para este CN.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {renderDocLink('Ficha técnica', detail.technicalSheetUrl)}
-          {renderDocLink('Prospecto', detail.leafletUrl)}
-          {renderDocLink('HTML', detail.docsHtmlUrl)}
-          {renderDocLink('PDF', detail.docsPdfUrl)}
+          {renderDocLink('Ficha técnica PDF', detail.technicalSheetUrl)}
+          {renderDocLink('Prospecto PDF', detail.leafletUrl)}
+          {renderDocLink('Ficha técnica HTML', detail.docsHtmlUrl)}
+          {renderDocLink('Prospecto HTML', detail.leafletHtmlUrl)}
         </div>
       </section>
 

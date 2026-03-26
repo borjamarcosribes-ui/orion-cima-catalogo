@@ -5,7 +5,8 @@ export type AutomationProcessKey =
   | 'SUPPLY_MONITOR'
   | 'CIMA_WATCHED'
   | 'CIMA_ALL'
-  | 'BIFIMED_ALL';
+  | 'BIFIMED_ALL'
+  | 'SUPPLY_EMAIL_DIGEST';
 
 export type AutomationOriginFilter = 'all' | 'manual' | 'scheduled';
 export type AutomationStatusFilter = 'all' | 'failed';
@@ -47,8 +48,33 @@ export type AutomationOverviewCard = {
   status: string | null;
 };
 
+export type AutomationNotificationSubscriptionListItem = {
+  createdAt: string;
+  email: string;
+  enabled: boolean;
+  endDate: string | null;
+  id: string;
+  lastSentAt: string | null;
+  updatedAt: string;
+};
+
+export type AutomationNotificationRunListItem = {
+  email: string;
+  errorMessage: string | null;
+  eventsCount: number;
+  id: string;
+  sentAt: string | null;
+  status: string;
+  subscriptionId: string;
+  summary: Record<string, unknown>;
+  windowEnd: string;
+  windowStart: string;
+};
+
 export type AutomationDashboardData = {
   locks: AutomationLockOverview[];
+  notificationRuns: AutomationNotificationRunListItem[];
+  notificationSubscriptions: AutomationNotificationSubscriptionListItem[];
   recentRuns: AutomationRunListItem[];
   summaryCards: AutomationOverviewCard[];
 };
@@ -96,6 +122,10 @@ function formatProcess(jobName: string): { key: AutomationProcessKey; label: str
 
   if (jobName === 'BIFIMED_CACHE_REFRESH_ALL') {
     return { key: 'BIFIMED_ALL', label: 'Caché BIFIMED (all)' };
+  }
+
+  if (jobName === 'SUPPLY_DAILY_EMAIL_DIGEST') {
+    return { key: 'SUPPLY_EMAIL_DIGEST', label: 'Digest diario por email' };
   }
 
   return { key: 'SUPPLY_MONITOR', label: 'Monitor AEMPS / CIMA' };
@@ -191,6 +221,23 @@ function summarizeCacheRefresh(summary: Record<string, unknown>): string {
   return parts.length > 0 ? parts.join(' · ') : 'Sin resumen disponible';
 }
 
+function summarizeSupplyEmailDigest(summary: Record<string, unknown>): string {
+  const subscriptionsProcessed =
+    typeof summary.subscriptionsProcessed === 'number' ? summary.subscriptionsProcessed : null;
+  const emailsSent = typeof summary.emailsSent === 'number' ? summary.emailsSent : null;
+  const totalEvents = typeof summary.totalEvents === 'number' ? summary.totalEvents : null;
+  const failed = typeof summary.failed === 'number' ? summary.failed : null;
+
+  const parts = [
+    subscriptionsProcessed !== null ? `${subscriptionsProcessed} suscripciones` : null,
+    emailsSent !== null ? `${emailsSent} enviados` : null,
+    totalEvents !== null ? `${totalEvents} eventos` : null,
+    failed !== null ? `${failed} fallidos` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(' · ') : 'Sin resumen disponible';
+}
+
 function summarizeRun(
   jobName: string,
   summary: Record<string, unknown>,
@@ -216,6 +263,10 @@ function summarizeRun(
     return summarizeCacheRefresh(summary);
   }
 
+  if (jobName === 'SUPPLY_DAILY_EMAIL_DIGEST') {
+    return summarizeSupplyEmailDigest(summary);
+  }
+
   return summarizeSupplyMonitor(summary, supplyMonitorRunById);
 }
 
@@ -229,7 +280,10 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
     latestCimaWatchedRun,
     latestCimaAllRun,
     latestBifimedAllRun,
+    latestSupplyEmailDigestRun,
     locks,
+    notificationSubscriptions,
+    notificationRuns,
   ] = await Promise.all([
     prisma.scheduledJobRun.findMany({
       where: {
@@ -240,6 +294,7 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
             'CIMA_CACHE_REFRESH_WATCHED',
             'CIMA_CACHE_REFRESH_ALL',
             'BIFIMED_CACHE_REFRESH_ALL',
+            'SUPPLY_DAILY_EMAIL_DIGEST',
           ],
         },
       },
@@ -268,6 +323,10 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
       where: { jobName: 'BIFIMED_CACHE_REFRESH_ALL' },
       orderBy: { startedAt: 'desc' },
     }),
+    prisma.scheduledJobRun.findFirst({
+      where: { jobName: 'SUPPLY_DAILY_EMAIL_DIGEST' },
+      orderBy: { startedAt: 'desc' },
+    }),
     prisma.executionLock.findMany({
       where: {
         key: {
@@ -277,10 +336,27 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
             'cima_cache_refresh_watched',
             'cima_cache_refresh_all',
             'bifimed_cache_refresh_all',
+            'supply_daily_email_digest',
           ],
         },
         expiresAt: { gte: now },
       },
+    }),
+    prisma.supplyNotificationSubscription.findMany({
+      orderBy: [{ enabled: 'desc' }, { email: 'asc' }],
+    }),
+    prisma.supplyNotificationRun.findMany({
+      include: {
+        subscription: {
+          select: {
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 20,
     }),
   ]);
 
@@ -361,6 +437,14 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
           : null,
         status: latestBifimedAllRun?.status ?? null,
       },
+      {
+        processKey: 'SUPPLY_EMAIL_DIGEST',
+        processLabel: 'Digest diario por email',
+        lastRunAt: latestSupplyEmailDigestRun
+          ? (latestSupplyEmailDigestRun.finishedAt ?? latestSupplyEmailDigestRun.startedAt).toISOString()
+          : null,
+        status: latestSupplyEmailDigestRun?.status ?? null,
+      },
     ],
     locks: [
       { key: 'nomenclator_update', label: 'Nomenclátor' },
@@ -368,6 +452,7 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
       { key: 'cima_cache_refresh_watched', label: 'Caché CIMA (watched)' },
       { key: 'cima_cache_refresh_all', label: 'Caché CIMA (all)' },
       { key: 'bifimed_cache_refresh_all', label: 'Caché BIFIMED (all)' },
+      { key: 'supply_daily_email_digest', label: 'Digest diario por email' },
     ].map((item) => {
       const lock = activeLockByKey.get(item.key);
 
@@ -378,6 +463,27 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
         expiresAt: lock?.expiresAt.toISOString() ?? null,
       };
     }),
+    notificationSubscriptions: notificationSubscriptions.map((item) => ({
+      id: item.id,
+      email: item.email,
+      enabled: item.enabled,
+      endDate: item.endDate?.toISOString() ?? null,
+      lastSentAt: item.lastSentAt?.toISOString() ?? null,
+      createdAt: item.createdAt.toISOString(),
+      updatedAt: item.updatedAt.toISOString(),
+    })),
+    notificationRuns: notificationRuns.map((item) => ({
+      id: item.id,
+      subscriptionId: item.subscriptionId,
+      email: item.subscription.email,
+      windowStart: item.windowStart.toISOString(),
+      windowEnd: item.windowEnd.toISOString(),
+      status: item.status,
+      eventsCount: item.eventsCount,
+      sentAt: item.sentAt?.toISOString() ?? null,
+      errorMessage: item.errorMessage ?? null,
+      summary: parseJsonObject(item.summaryJson),
+    })),
     recentRuns: recentRuns.map((run) => {
       const process = formatProcess(run.jobName);
       const summary = parseJsonObject(run.summaryJson);

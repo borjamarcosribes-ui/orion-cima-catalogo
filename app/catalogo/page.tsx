@@ -160,10 +160,8 @@ export default async function CatalogPage({ searchParams }: PageProps) {
       <section className="card">
         <div className="section-title">
           <div>
-            <div className="badge primary">Catálogo operativo</div>
-            <h1>Listado real por CN</h1>
+            <h1>Buscador CIMA Integrada con Bifimed y Orion Logis</h1>
           </div>
-          <span className="badge success">Base local: nomenclátor + CIMA + Orion + BIFIMED</span>
         </div>
 
         <CatalogFiltersForm
@@ -182,8 +180,8 @@ export default async function CatalogPage({ searchParams }: PageProps) {
       <section className="grid" style={{ gap: 14 }}>
         <p className="muted">Resultados: {data.total}</p>
         <p className="muted">
-          Nota: si no hay datos cargados en caché local de BIFIMED o documentos CIMA, se mostrará “Sin dato” o “En
-          estudio”; esta fase no inventa datos externos.
+          Si no hay datos cargados en caché local de BIFIMED o documentos CIMA, se mostrará “Sin dato” o “En
+          estudio”.
         </p>
 
         {data.rows.map((medicine) => {

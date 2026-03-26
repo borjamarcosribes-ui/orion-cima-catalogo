@@ -78,7 +78,7 @@ model MedicineMaster {
 }
 
 model CimaCache {
-  nationalCode            String         @id
+  nationalCode            String                    @id
   officialName            String?
   activeIngredient        String?
   atcCode                 String?
@@ -87,16 +87,34 @@ model CimaCache {
   supplyStatus            String?
   technicalSheetUrl       String?
   leafletUrl              String?
+  leafletHtmlUrl          String?
   htmlUrl                 String?
   pdfUrl                  String?
   rawPayload              String?
   fetchedAt               DateTime?
-  updatedAt               DateTime       @updatedAt
-  medicineMaster          MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+  updatedAt               DateTime                  @updatedAt
+  medicineMaster          MedicineMaster            @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+  characteristics         CimaCharacteristicCache[]
 
   @@index([atcCode])
   @@index([laboratory])
   @@map("cima_cache")
+}
+
+model CimaCharacteristicCache {
+  id              String    @id @default(cuid())
+  nationalCode    String
+  label           String
+  normalizedLabel String
+  sortOrder       Int
+  rawPayload      String?
+  updatedAt       DateTime  @updatedAt
+  cima            CimaCache @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+
+  @@unique([nationalCode, normalizedLabel])
+  @@index([nationalCode, sortOrder])
+  @@index([normalizedLabel])
+  @@map("cima_characteristic_cache")
 }
 
 model SupplyAlert {
@@ -326,4 +344,39 @@ model ExecutionLock {
 
   @@index([expiresAt])
   @@map("execution_locks")
+}
+
+model SupplyNotificationSubscription {
+  id          String                  @id @default(cuid())
+  email       String                  @unique
+  enabled     Boolean                 @default(true)
+  endDate     DateTime?
+  lastSentAt  DateTime?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+  runs        SupplyNotificationRun[]
+
+  @@index([enabled])
+  @@index([endDate])
+  @@map("supply_notification_subscriptions")
+}
+
+model SupplyNotificationRun {
+  id              String                         @id @default(cuid())
+  subscriptionId  String
+  windowStart     DateTime
+  windowEnd       DateTime
+  status          String                         @default("pending")
+  eventsCount     Int                            @default(0)
+  sentAt          DateTime?
+  errorMessage    String?
+  summaryJson     String?
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+  subscription    SupplyNotificationSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, createdAt])
+  @@index([status, createdAt])
+  @@index([windowStart, windowEnd])
+  @@map("supply_notification_runs")
 }

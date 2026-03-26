@@ -10,6 +10,32 @@ const CIMA_REST_BASE_URL = process.env.CIMA_REST_BASE_URL?.trim() || 'https://ci
 
 type RefreshScope = 'watched' | 'all';
 
+type NormalizedCharacteristic = {
+  label: string;
+  normalizedLabel: string;
+  sortOrder: number;
+  rawPayload: string | null;
+};
+
+type NormalizedCimaPayload = {
+  nationalCode: string;
+  officialName: string | null;
+  activeIngredient: string | null;
+  atcCode: string | null;
+  laboratory: string | null;
+  commercializationStatus: string | null;
+  supplyStatus: string | null;
+  technicalSheetUrl: string | null;
+  leafletUrl: string | null;
+  leafletHtmlUrl: string | null;
+  htmlUrl: string | null;
+  pdfUrl: string | null;
+  rawPayload: string;
+  fetchedAt: Date;
+  updatedAt: Date;
+  characteristics: NormalizedCharacteristic[];
+};
+
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) {
@@ -52,6 +78,18 @@ function safeString(value: unknown): string | null {
   return null;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function stripAccents(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function normalizeBoolean(value: unknown): boolean | null {
   if (typeof value === 'boolean') {
     return value;
@@ -63,12 +101,19 @@ function normalizeBoolean(value: unknown): boolean | null {
   }
 
   if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === '1' || normalized === 'true') return true;
-    if (normalized === '0' || normalized === 'false') return false;
+    const normalized = stripAccents(value.trim().toLowerCase());
+    if (['1', 'true', 's', 'si', 'yes'].includes(normalized)) return true;
+    if (['0', 'false', 'n', 'no'].includes(normalized)) return false;
   }
 
   return null;
+}
+
+function normalizeCharacteristicLabel(label: string): string {
+  return stripAccents(label)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 function pickMatchingPresentation(medicamento: any, cn: string): any | null {
@@ -117,6 +162,7 @@ function pickDocumentUrls(medicamento: any, presentation: any) {
   return {
     technicalSheetUrl: safeString(technicalSheet?.url),
     leafletUrl: safeString(leaflet?.url),
+    leafletHtmlUrl: safeString(leaflet?.urlHtml),
     htmlUrl: safeString(technicalSheet?.urlHtml) ?? safeString(leaflet?.urlHtml),
     pdfUrl: safeString(technicalSheet?.url) ?? safeString(leaflet?.url),
   };
@@ -146,7 +192,216 @@ function normalizeSupplyStatus(medicamento: any, presentation: any): string | nu
   return null;
 }
 
-function normalizeCimaPayload(medicamento: any, cn: string) {
+function readCharacteristicLabel(value: unknown): string | null {
+  const direct = safeString(value);
+  if (direct) {
+    return normalizeWhitespace(direct);
+  }
+
+  if (value && typeof value === 'object') {
+    const candidate =
+      safeString((value as any).label) ??
+      safeString((value as any).nombre) ??
+      safeString((value as any).descripcion) ??
+      safeString((value as any).description) ??
+      safeString((value as any).literal) ??
+      safeString((value as any).titulo) ??
+      safeString((value as any).title) ??
+      safeString((value as any).texto) ??
+      safeString((value as any).text) ??
+      safeString((value as any).caracteristica) ??
+      safeString((value as any).value);
+
+    return candidate ? normalizeWhitespace(candidate) : null;
+  }
+
+  return null;
+}
+
+function isDiscardableCharacteristicLabel(label: string): boolean {
+  const normalized = stripAccents(label).toLowerCase().trim();
+  return ['n/a', 'na', 'no aplica', 'ninguna', 'ninguno'].includes(normalized);
+}
+
+function addCharacteristic(
+  target: Map<string, NormalizedCharacteristic>,
+  label: string | null,
+  rawPayload: string | null,
+): void {
+  if (!label || isDiscardableCharacteristicLabel(label)) {
+    return;
+  }
+
+  const normalizedLabel = normalizeCharacteristicLabel(label);
+  if (!normalizedLabel || target.has(normalizedLabel)) {
+    return;
+  }
+
+  target.set(normalizedLabel, {
+    label,
+    normalizedLabel,
+    sortOrder: target.size,
+    rawPayload,
+  });
+}
+
+function addCharacteristicsFromArray(
+  target: Map<string, NormalizedCharacteristic>,
+  source: unknown,
+): void {
+  if (!Array.isArray(source)) {
+    return;
+  }
+
+  for (const item of source) {
+    const label = readCharacteristicLabel(item);
+    const rawPayload =
+      item === null || item === undefined
+        ? null
+        : (() => {
+            try {
+              return JSON.stringify(item);
+            } catch {
+              return null;
+            }
+          })();
+
+    addCharacteristic(target, label, rawPayload);
+  }
+}
+
+function addCharacteristicsFromScalarKeys(
+  target: Map<string, NormalizedCharacteristic>,
+  sources: any[],
+  keys: string[],
+): void {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue;
+    }
+
+    for (const key of keys) {
+      const label = readCharacteristicLabel(source[key]);
+      if (!label) {
+        continue;
+      }
+
+      let rawPayload: string | null = null;
+      try {
+        rawPayload = JSON.stringify({ source: 'scalar_key', key, value: source[key] });
+      } catch {
+        rawPayload = null;
+      }
+
+      addCharacteristic(target, label, rawPayload);
+    }
+  }
+}
+
+function pickFirstBooleanFromKeys(sources: any[], keys: string[]): boolean | null {
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') {
+      continue;
+    }
+
+    for (const key of keys) {
+      const value = normalizeBoolean(source[key]);
+      if (value !== null) {
+        return value;
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractCharacteristics(medicamento: any, presentation: any): NormalizedCharacteristic[] {
+  const characteristics = new Map<string, NormalizedCharacteristic>();
+
+  addCharacteristicsFromArray(characteristics, presentation?.caracteristicas);
+  addCharacteristicsFromArray(characteristics, presentation?.characteristics);
+  addCharacteristicsFromArray(characteristics, presentation?.caracts);
+  addCharacteristicsFromArray(characteristics, medicamento?.caracteristicas);
+  addCharacteristicsFromArray(characteristics, medicamento?.characteristics);
+  addCharacteristicsFromArray(characteristics, medicamento?.caracts);
+
+  addCharacteristicsFromScalarKeys(characteristics, [presentation, medicamento], [
+    'cpresc',
+    'condicionesPrescripcion',
+    'condiciones_prescripcion',
+    'prescriptionCategory',
+    'dispensacion',
+  ]);
+
+  const noSubstitutableName =
+    safeString(presentation?.nosustituible?.nombre) ?? safeString(medicamento?.nosustituible?.nombre);
+  if (noSubstitutableName && !isDiscardableCharacteristicLabel(noSubstitutableName)) {
+    addCharacteristic(
+      characteristics,
+      noSubstitutableName === 'No sustituible' ? noSubstitutableName : `No sustituible${noSubstitutableName ? ` (${noSubstitutableName})` : ''}`,
+      JSON.stringify({ source: 'object_flag', key: 'nosustituible' }),
+    );
+  }
+
+  const booleanCharacteristicDefinitions = [
+    {
+      label: 'Biosimilar',
+      keys: ['biosimilar'],
+    },
+    {
+      label: 'Estupefaciente',
+      keys: ['estupefaciente', 'narcotico', 'narcotic'],
+    },
+    {
+      label: 'Medicamento huérfano',
+      keys: ['huerfano', 'huérfano', 'medicamentoHuerfano', 'medicamento_huerfano', 'orphanDrug'],
+    },
+    {
+      label: 'Medicamento sujeto a prescripción médica',
+      keys: [
+        'requiereReceta',
+        'requiere_receta',
+        'conReceta',
+        'con_receta',
+        'prescriptionRequired',
+        'prescription_required',
+        'receta',
+      ],
+    },
+    {
+      label: 'Seguimiento adicional',
+      keys: [
+        'seguimientoAdicional',
+        'seguimiento_adicional',
+        'additionalMonitoring',
+        'additional_monitoring',
+        'trianguloNegro',
+        'triangulo_negro',
+        'triangulo',
+        'blackTriangle',
+        'black_triangle',
+      ],
+    },
+    {
+      label: 'Medicamento genérico',
+      keys: ['generico', 'generic', 'esGenerico', 'es_generico'],
+    },
+  ];
+
+  for (const definition of booleanCharacteristicDefinitions) {
+    const value = pickFirstBooleanFromKeys([presentation, medicamento], definition.keys);
+    if (value === true) {
+      addCharacteristic(characteristics, definition.label, JSON.stringify({ source: 'boolean_flag', keys: definition.keys }));
+    }
+  }
+
+  return Array.from(characteristics.values()).map((item, index) => ({
+    ...item,
+    sortOrder: index,
+  }));
+}
+
+function normalizeCimaPayload(medicamento: any, cn: string): NormalizedCimaPayload {
   const presentation = pickMatchingPresentation(medicamento, cn);
   const docs = pickDocumentUrls(medicamento, presentation);
   const now = new Date();
@@ -161,11 +416,13 @@ function normalizeCimaPayload(medicamento: any, cn: string) {
     supplyStatus: normalizeSupplyStatus(medicamento, presentation),
     technicalSheetUrl: docs.technicalSheetUrl,
     leafletUrl: docs.leafletUrl,
+    leafletHtmlUrl: docs.leafletHtmlUrl,
     htmlUrl: docs.htmlUrl,
     pdfUrl: docs.pdfUrl,
     rawPayload: JSON.stringify(medicamento),
     fetchedAt: now,
     updatedAt: now,
+    characteristics: extractCharacteristics(medicamento, presentation),
   };
 }
 
@@ -244,7 +501,7 @@ async function ensureMedicineMasterRow(cn: string, preferredLabel: string | null
   }
 }
 
-async function upsertCimaCacheRow(entry: ReturnType<typeof normalizeCimaPayload>): Promise<void> {
+async function upsertCimaCacheRow(entry: NormalizedCimaPayload): Promise<void> {
   await ensureMedicineMasterRow(entry.nationalCode, entry.officialName, entry.updatedAt);
 
   await prisma.$executeRaw`
@@ -258,6 +515,7 @@ async function upsertCimaCacheRow(entry: ReturnType<typeof normalizeCimaPayload>
       "supplyStatus",
       "technicalSheetUrl",
       "leafletUrl",
+      "leafletHtmlUrl",
       "htmlUrl",
       "pdfUrl",
       "rawPayload",
@@ -274,6 +532,7 @@ async function upsertCimaCacheRow(entry: ReturnType<typeof normalizeCimaPayload>
       ${entry.supplyStatus},
       ${entry.technicalSheetUrl},
       ${entry.leafletUrl},
+      ${entry.leafletHtmlUrl},
       ${entry.htmlUrl},
       ${entry.pdfUrl},
       ${entry.rawPayload},
@@ -289,12 +548,29 @@ async function upsertCimaCacheRow(entry: ReturnType<typeof normalizeCimaPayload>
       "supplyStatus" = excluded."supplyStatus",
       "technicalSheetUrl" = excluded."technicalSheetUrl",
       "leafletUrl" = excluded."leafletUrl",
+      "leafletHtmlUrl" = excluded."leafletHtmlUrl",
       "htmlUrl" = excluded."htmlUrl",
       "pdfUrl" = excluded."pdfUrl",
       "rawPayload" = excluded."rawPayload",
       "fetchedAt" = excluded."fetchedAt",
       "updatedAt" = excluded."updatedAt"
   `;
+
+  await prisma.cimaCharacteristicCache.deleteMany({
+    where: { nationalCode: entry.nationalCode },
+  });
+
+  if (entry.characteristics.length > 0) {
+    await prisma.cimaCharacteristicCache.createMany({
+      data: entry.characteristics.map((item) => ({
+        nationalCode: entry.nationalCode,
+        label: item.label,
+        normalizedLabel: item.normalizedLabel,
+        sortOrder: item.sortOrder,
+        rawPayload: item.rawPayload,
+      })),
+    });
+  }
 }
 
 async function resolveTargetCns(scope: RefreshScope, limit: number, offset: number): Promise<string[]> {
