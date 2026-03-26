@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import type React from 'react';
 
 import { getCatalogDetailByCn } from '@/lib/catalog';
 
@@ -18,7 +19,7 @@ function formatDate(value: string | null): string {
   }).format(new Date(value));
 }
 
-function renderDocLink(label: string, href: string | null): JSX.Element {
+function renderDocLink(label: string, href: string | null): React.ReactElement {
   if (!href) {
     return <span className="muted">{label}: no disponible</span>;
   }

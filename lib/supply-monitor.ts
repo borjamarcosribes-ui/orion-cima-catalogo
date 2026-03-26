@@ -285,16 +285,18 @@ export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
     });
 
     return rows
-      .map((row) => ({
-        cn: row.cn,
-        articleCode: row.watchedMedicine.articleCode,
-        shortDescription: row.watchedMedicine.shortDescription,
-        status: row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
-        issueType: row.issueType,
-        startedAt: row.startedAt?.toISOString() ?? null,
-        expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
-        observations: row.observations,
-      }))
+      .map(
+        (row): ActiveSupplyIssue => ({
+          cn: row.cn,
+          articleCode: row.watchedMedicine.articleCode,
+          shortDescription: row.watchedMedicine.shortDescription,
+          status: row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
+          issueType: row.issueType,
+          startedAt: row.startedAt?.toISOString() ?? null,
+          expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
+          observations: row.observations,
+        }),
+      )
       .sort((left, right) => {
         if (left.startedAt && right.startedAt) {
           const byStartedAt = right.startedAt.localeCompare(left.startedAt);

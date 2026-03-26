@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 const CIMA_REST_BASE_URL = process.env.CIMA_REST_BASE_URL?.trim() || 'https://cima.aemps.es/cima/rest';
 
 type RefreshScope = 'watched' | 'all';
+type LooseRecord = Record<string, unknown>;
 
 type NormalizedCharacteristic = {
   label: string;
@@ -35,6 +36,22 @@ type NormalizedCimaPayload = {
   updatedAt: Date;
   characteristics: NormalizedCharacteristic[];
 };
+
+function asRecord(value: unknown): LooseRecord | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as LooseRecord;
+}
+
+function asRecordArray(value: unknown): LooseRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((item) => asRecord(item)).filter((item): item is LooseRecord => item !== null);
+}
 
 function isAuthorized(request: NextRequest): boolean {
   const secret = process.env.CRON_SECRET?.trim();
@@ -116,30 +133,30 @@ function normalizeCharacteristicLabel(label: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
-function pickMatchingPresentation(medicamento: any, cn: string): any | null {
-  const presentations = Array.isArray(medicamento?.presentaciones) ? medicamento.presentaciones : [];
-  return presentations.find((presentation: any) => safeString(presentation?.cn) === cn) ?? null;
+function pickMatchingPresentation(medicamento: LooseRecord, cn: string): LooseRecord | null {
+  const presentations = asRecordArray(medicamento['presentaciones']);
+  return presentations.find((presentation) => safeString(presentation['cn']) === cn) ?? null;
 }
 
-function pickActiveIngredient(medicamento: any, presentation: any): string | null {
-  const direct = safeString(presentation?.pactivos) ?? safeString(medicamento?.pactivos);
+function pickActiveIngredient(medicamento: LooseRecord, presentation: LooseRecord | null): string | null {
+  const direct = safeString(presentation?.['pactivos']) ?? safeString(medicamento['pactivos']);
   if (direct) {
     return direct;
   }
 
-  const principles = Array.isArray(medicamento?.principiosActivos) ? medicamento.principiosActivos : [];
+  const principles = asRecordArray(medicamento['principiosActivos']);
   const names = principles
-    .map((principle: any) => safeString(principle?.nombre))
-    .filter((value: string | null): value is string => Boolean(value));
+    .map((principle) => safeString(principle['nombre']))
+    .filter((value): value is string => Boolean(value));
 
   return names.length > 0 ? names.join(', ') : null;
 }
 
-function pickAtcCode(medicamento: any): string | null {
-  const atcs = Array.isArray(medicamento?.atcs) ? medicamento.atcs : [];
+function pickAtcCode(medicamento: LooseRecord): string | null {
+  const atcs = asRecordArray(medicamento['atcs']);
 
   for (const atc of atcs) {
-    const code = safeString(atc?.codigo);
+    const code = safeString(atc['codigo']);
     if (code) {
       return code;
     }
@@ -148,44 +165,41 @@ function pickAtcCode(medicamento: any): string | null {
   return null;
 }
 
-function pickDocumentUrls(medicamento: any, presentation: any) {
-  const docs =
-    Array.isArray(presentation?.docs) && presentation.docs.length > 0
-      ? presentation.docs
-      : Array.isArray(medicamento?.docs)
-        ? medicamento.docs
-        : [];
+function pickDocumentUrls(medicamento: LooseRecord, presentation: LooseRecord | null) {
+  const presentationDocs = asRecordArray(presentation?.['docs']);
+  const medicineDocs = asRecordArray(medicamento['docs']);
+  const docs = presentationDocs.length > 0 ? presentationDocs : medicineDocs;
 
-  const technicalSheet = docs.find((document: any) => Number(document?.tipo) === 1) ?? null;
-  const leaflet = docs.find((document: any) => Number(document?.tipo) === 2) ?? null;
+  const technicalSheet = docs.find((document) => Number(document['tipo']) === 1) ?? null;
+  const leaflet = docs.find((document) => Number(document['tipo']) === 2) ?? null;
 
   return {
-    technicalSheetUrl: safeString(technicalSheet?.url),
-    leafletUrl: safeString(leaflet?.url),
-    leafletHtmlUrl: safeString(leaflet?.urlHtml),
-    htmlUrl: safeString(technicalSheet?.urlHtml) ?? safeString(leaflet?.urlHtml),
-    pdfUrl: safeString(technicalSheet?.url) ?? safeString(leaflet?.url),
+    technicalSheetUrl: safeString(technicalSheet?.['url']),
+    leafletUrl: safeString(leaflet?.['url']),
+    leafletHtmlUrl: safeString(leaflet?.['urlHtml']),
+    htmlUrl: safeString(technicalSheet?.['urlHtml']) ?? safeString(leaflet?.['urlHtml']),
+    pdfUrl: safeString(technicalSheet?.['url']) ?? safeString(leaflet?.['url']),
   };
 }
 
-function normalizeCommercializationStatus(medicamento: any, presentation: any): string | null {
-  const commercialized = normalizeBoolean(presentation?.comerc);
+function normalizeCommercializationStatus(medicamento: LooseRecord, presentation: LooseRecord | null): string | null {
+  const commercialized = normalizeBoolean(presentation?.['comerc']);
   if (commercialized === true) return 'COMERCIALIZADO';
   if (commercialized === false) return 'NO_COMERCIALIZADO';
 
-  const medicineCommercialized = normalizeBoolean(medicamento?.comerc);
+  const medicineCommercialized = normalizeBoolean(medicamento['comerc']);
   if (medicineCommercialized === true) return 'COMERCIALIZADO';
   if (medicineCommercialized === false) return 'NO_COMERCIALIZADO';
 
   return null;
 }
 
-function normalizeSupplyStatus(medicamento: any, presentation: any): string | null {
-  const hasSupplyIssue = normalizeBoolean(presentation?.psum);
+function normalizeSupplyStatus(medicamento: LooseRecord, presentation: LooseRecord | null): string | null {
+  const hasSupplyIssue = normalizeBoolean(presentation?.['psum']);
   if (hasSupplyIssue === true) return 'Con problemas de suministro';
   if (hasSupplyIssue === false) return 'Sin problemas de suministro';
 
-  const medicineSupplyIssue = normalizeBoolean(medicamento?.psum);
+  const medicineSupplyIssue = normalizeBoolean(medicamento['psum']);
   if (medicineSupplyIssue === true) return 'Con problemas de suministro';
   if (medicineSupplyIssue === false) return 'Sin problemas de suministro';
 
@@ -198,24 +212,25 @@ function readCharacteristicLabel(value: unknown): string | null {
     return normalizeWhitespace(direct);
   }
 
-  if (value && typeof value === 'object') {
-    const candidate =
-      safeString((value as any).label) ??
-      safeString((value as any).nombre) ??
-      safeString((value as any).descripcion) ??
-      safeString((value as any).description) ??
-      safeString((value as any).literal) ??
-      safeString((value as any).titulo) ??
-      safeString((value as any).title) ??
-      safeString((value as any).texto) ??
-      safeString((value as any).text) ??
-      safeString((value as any).caracteristica) ??
-      safeString((value as any).value);
-
-    return candidate ? normalizeWhitespace(candidate) : null;
+  const record = asRecord(value);
+  if (!record) {
+    return null;
   }
 
-  return null;
+  const candidate =
+    safeString(record['label']) ??
+    safeString(record['nombre']) ??
+    safeString(record['descripcion']) ??
+    safeString(record['description']) ??
+    safeString(record['literal']) ??
+    safeString(record['titulo']) ??
+    safeString(record['title']) ??
+    safeString(record['texto']) ??
+    safeString(record['text']) ??
+    safeString(record['caracteristica']) ??
+    safeString(record['value']);
+
+  return candidate ? normalizeWhitespace(candidate) : null;
 }
 
 function isDiscardableCharacteristicLabel(label: string): boolean {
@@ -272,11 +287,11 @@ function addCharacteristicsFromArray(
 
 function addCharacteristicsFromScalarKeys(
   target: Map<string, NormalizedCharacteristic>,
-  sources: any[],
+  sources: Array<LooseRecord | null>,
   keys: string[],
 ): void {
   for (const source of sources) {
-    if (!source || typeof source !== 'object') {
+    if (!source) {
       continue;
     }
 
@@ -298,9 +313,9 @@ function addCharacteristicsFromScalarKeys(
   }
 }
 
-function pickFirstBooleanFromKeys(sources: any[], keys: string[]): boolean | null {
+function pickFirstBooleanFromKeys(sources: Array<LooseRecord | null>, keys: string[]): boolean | null {
   for (const source of sources) {
-    if (!source || typeof source !== 'object') {
+    if (!source) {
       continue;
     }
 
@@ -315,15 +330,15 @@ function pickFirstBooleanFromKeys(sources: any[], keys: string[]): boolean | nul
   return null;
 }
 
-function extractCharacteristics(medicamento: any, presentation: any): NormalizedCharacteristic[] {
+function extractCharacteristics(medicamento: LooseRecord, presentation: LooseRecord | null): NormalizedCharacteristic[] {
   const characteristics = new Map<string, NormalizedCharacteristic>();
 
-  addCharacteristicsFromArray(characteristics, presentation?.caracteristicas);
-  addCharacteristicsFromArray(characteristics, presentation?.characteristics);
-  addCharacteristicsFromArray(characteristics, presentation?.caracts);
-  addCharacteristicsFromArray(characteristics, medicamento?.caracteristicas);
-  addCharacteristicsFromArray(characteristics, medicamento?.characteristics);
-  addCharacteristicsFromArray(characteristics, medicamento?.caracts);
+  addCharacteristicsFromArray(characteristics, presentation?.['caracteristicas']);
+  addCharacteristicsFromArray(characteristics, presentation?.['characteristics']);
+  addCharacteristicsFromArray(characteristics, presentation?.['caracts']);
+  addCharacteristicsFromArray(characteristics, medicamento['caracteristicas']);
+  addCharacteristicsFromArray(characteristics, medicamento['characteristics']);
+  addCharacteristicsFromArray(characteristics, medicamento['caracts']);
 
   addCharacteristicsFromScalarKeys(characteristics, [presentation, medicamento], [
     'cpresc',
@@ -333,12 +348,17 @@ function extractCharacteristics(medicamento: any, presentation: any): Normalized
     'dispensacion',
   ]);
 
+  const presentationNoSubstitutable = asRecord(presentation?.['nosustituible']);
+  const medicineNoSubstitutable = asRecord(medicamento['nosustituible']);
   const noSubstitutableName =
-    safeString(presentation?.nosustituible?.nombre) ?? safeString(medicamento?.nosustituible?.nombre);
+    safeString(presentationNoSubstitutable?.['nombre']) ?? safeString(medicineNoSubstitutable?.['nombre']);
+
   if (noSubstitutableName && !isDiscardableCharacteristicLabel(noSubstitutableName)) {
     addCharacteristic(
       characteristics,
-      noSubstitutableName === 'No sustituible' ? noSubstitutableName : `No sustituible${noSubstitutableName ? ` (${noSubstitutableName})` : ''}`,
+      noSubstitutableName === 'No sustituible'
+        ? noSubstitutableName
+        : `No sustituible${noSubstitutableName ? ` (${noSubstitutableName})` : ''}`,
       JSON.stringify({ source: 'object_flag', key: 'nosustituible' }),
     );
   }
@@ -386,12 +406,16 @@ function extractCharacteristics(medicamento: any, presentation: any): Normalized
       label: 'Medicamento genérico',
       keys: ['generico', 'generic', 'esGenerico', 'es_generico'],
     },
-  ];
+  ] as const;
 
   for (const definition of booleanCharacteristicDefinitions) {
-    const value = pickFirstBooleanFromKeys([presentation, medicamento], definition.keys);
+    const value = pickFirstBooleanFromKeys([presentation, medicamento], [...definition.keys]);
     if (value === true) {
-      addCharacteristic(characteristics, definition.label, JSON.stringify({ source: 'boolean_flag', keys: definition.keys }));
+      addCharacteristic(
+        characteristics,
+        definition.label,
+        JSON.stringify({ source: 'boolean_flag', keys: definition.keys }),
+      );
     }
   }
 
@@ -401,17 +425,17 @@ function extractCharacteristics(medicamento: any, presentation: any): Normalized
   }));
 }
 
-function normalizeCimaPayload(medicamento: any, cn: string): NormalizedCimaPayload {
+function normalizeCimaPayload(medicamento: LooseRecord, cn: string): NormalizedCimaPayload {
   const presentation = pickMatchingPresentation(medicamento, cn);
   const docs = pickDocumentUrls(medicamento, presentation);
   const now = new Date();
 
   return {
     nationalCode: cn,
-    officialName: safeString(presentation?.nombre) ?? safeString(medicamento?.nombre),
+    officialName: safeString(presentation?.['nombre']) ?? safeString(medicamento['nombre']),
     activeIngredient: pickActiveIngredient(medicamento, presentation),
     atcCode: pickAtcCode(medicamento),
-    laboratory: safeString(presentation?.labtitular) ?? safeString(medicamento?.labtitular),
+    laboratory: safeString(presentation?.['labtitular']) ?? safeString(medicamento['labtitular']),
     commercializationStatus: normalizeCommercializationStatus(medicamento, presentation),
     supplyStatus: normalizeSupplyStatus(medicamento, presentation),
     technicalSheetUrl: docs.technicalSheetUrl,
@@ -426,7 +450,7 @@ function normalizeCimaPayload(medicamento: any, cn: string): NormalizedCimaPaylo
   };
 }
 
-async function fetchMedicamentoByCn(cn: string): Promise<any | null> {
+async function fetchMedicamentoByCn(cn: string): Promise<LooseRecord | null> {
   const url = new URL(`${CIMA_REST_BASE_URL}/medicamento`);
   url.searchParams.set('cn', cn);
 
@@ -452,17 +476,23 @@ async function fetchMedicamentoByCn(cn: string): Promise<any | null> {
     return null;
   }
 
-  const payload = JSON.parse(rawText);
+  const payload: unknown = JSON.parse(rawText);
 
   if (Array.isArray(payload)) {
-    return payload[0] ?? null;
+    return asRecord(payload[0]) ?? null;
   }
 
-  if (Array.isArray(payload?.resultados)) {
-    return payload.resultados[0] ?? null;
+  const payloadRecord = asRecord(payload);
+  if (!payloadRecord) {
+    return null;
   }
 
-  return payload ?? null;
+  const resultados = asRecordArray(payloadRecord['resultados']);
+  if (resultados.length > 0) {
+    return resultados[0];
+  }
+
+  return payloadRecord;
 }
 
 async function ensureMedicineMasterRow(cn: string, preferredLabel: string | null, now: Date): Promise<void> {

@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, open, rm, stat } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
 import { pipeline } from 'node:stream/promises';
 import { createInflateRaw } from 'node:zlib';
 
@@ -55,7 +56,7 @@ async function downloadZipToFile(zipUrl: string, zipFilePath: string): Promise<n
   }
 
   const output = createWriteStream(zipFilePath);
-  await pipeline(Readable.fromWeb(response.body as globalThis.ReadableStream), output);
+  await pipeline(Readable.fromWeb(response.body as unknown as NodeWebReadableStream), output);
 
   const downloadedLength = response.headers.get('content-length');
   if (downloadedLength && /^\d+$/.test(downloadedLength)) {
