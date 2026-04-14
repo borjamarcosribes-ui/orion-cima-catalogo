@@ -1,16 +1,16 @@
 'use server';
 
-import { getAdminAuthorizationResult } from '@/lib/authorization';
+import { auth } from '@/auth';
 import type { SaveTsvImportPayload, SaveTsvImportResult } from '@/lib/import/persistence';
 import { listTsvImportHistory, saveTsvImport } from '@/lib/tsv-imports';
 
 export async function saveTsvImportAction(payload: SaveTsvImportPayload): Promise<SaveTsvImportResult> {
-  const authorization = await getAdminAuthorizationResult();
+  const session = await auth();
 
-  if (!authorization.ok) {
+  if (!session?.user) {
     return {
       ok: false,
-      message: authorization.message,
+      message: 'No autorizado: sesión requerida.',
       history: await listTsvImportHistory(),
     };
   }
