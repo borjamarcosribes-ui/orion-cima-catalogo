@@ -26,6 +26,7 @@ type ImportsClientProps = {
   initialHistory: PersistedTsvImportHistoryEntry[];
   initialPersistedImport: PersistedTsvImportPreview | null;
   saveImportAction: (payload: SaveTsvImportPayload) => Promise<SaveTsvImportResult>;
+  canManage: boolean;
 };
 
 type LoadState =
@@ -253,6 +254,7 @@ export default function ImportsClient({
   initialHistory,
   initialPersistedImport,
   saveImportAction,
+  canManage,
 }: ImportsClientProps) {
   const router = useRouter();
   const [loadState, setLoadState] = useState<LoadState>(
@@ -297,7 +299,13 @@ export default function ImportsClient({
   const preview = loadState.preview;
   const result = preview?.result ?? null;
   const hasErrors = result ? result.errors.length > 0 : false;
-  const canSave = preview?.source === 'local' && result !== null && !hasErrors && result.items.length > 0 && !isPending;
+  const canSave =
+    canManage &&
+    preview?.source === 'local' &&
+    result !== null &&
+    !hasErrors &&
+    result.items.length > 0 &&
+    !isPending;
   const resultFileName = preview?.fileName ?? null;
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
@@ -401,6 +409,9 @@ export default function ImportsClient({
           <button className="primary-button" disabled={!canSave} onClick={handleSaveImport} type="button">
             {isPending ? 'Guardando…' : 'Guardar importación'}
           </button>
+
+          {!canManage ? <span className="muted">Modo lectura: solo ADMIN puede guardar importaciones.</span> : null}
+
           <span className="muted">
             {preview?.source === 'persisted'
               ? `Vista previa cargada desde una importación guardada${preview.importedAt ? ` · ${formatImportedAt(preview.importedAt)}` : ''}.`

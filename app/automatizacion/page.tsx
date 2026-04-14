@@ -5,11 +5,12 @@ import {
   toggleSupplyNotificationSubscriptionAction,
 } from '@/app/automatizacion/actions';
 import { getAutomationDashboardData } from '@/lib/automation-runs';
+import { getAdminAuthorizationResult } from '@/lib/authorization';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AutomationPage() {
-  const data = await getAutomationDashboardData();
+  const [data, authorization] = await Promise.all([getAutomationDashboardData(), getAdminAuthorizationResult()]);
 
   return (
     <AutomationClient
@@ -17,6 +18,7 @@ export default async function AutomationPage() {
       createSupplyNotificationSubscriptionAction={createSupplyNotificationSubscriptionAction}
       toggleSupplyNotificationSubscriptionAction={toggleSupplyNotificationSubscriptionAction}
       deleteSupplyNotificationSubscriptionAction={deleteSupplyNotificationSubscriptionAction}
+      readOnly={!authorization.ok}
     />
   );
 }

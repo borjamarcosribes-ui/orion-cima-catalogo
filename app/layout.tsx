@@ -1,13 +1,17 @@
 import './globals.css';
 import type { Metadata } from 'next';
+
 import { NavLink } from '@/components/nav-link';
+import { auth, signOut } from '@/auth';
 
 export const metadata: Metadata = {
   title: 'Integramécum | Catálogo integrado',
   description: 'Catálogo Integrado CIMA + BIFIMED + Orion Logis.',
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const session = await auth();
+
   return (
     <html lang="es">
       <body>
@@ -29,8 +33,26 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <NavLink href="/suministro">Gestor de Roturas</NavLink>
               <NavLink href="/automatizacion">Panel de Automatizaciones</NavLink>
             </nav>
+
+            {session?.user ? (
+              <div className="actions-row" style={{ marginTop: 0 }}>
+                <span className="badge primary">{session.user.role}</span>
+                <span className="muted">{session.user.email}</span>
+                <form
+                  action={async () => {
+                    'use server';
+                    await signOut({ redirectTo: '/login' });
+                  }}
+                >
+                  <button className="secondary-button" type="submit">
+                    Salir
+                  </button>
+                </form>
+              </div>
+            ) : null}
           </div>
         </header>
+
         <main>{children}</main>
       </body>
     </html>

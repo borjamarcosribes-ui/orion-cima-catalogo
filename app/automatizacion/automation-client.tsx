@@ -23,6 +23,7 @@ type AutomationClientProps = {
   deleteSupplyNotificationSubscriptionAction: (input: {
     id: string;
   }) => Promise<SupplyNotificationActionResult>;
+  readOnly?: boolean;
 };
 
 type ProcessFilter =
@@ -89,6 +90,7 @@ export default function AutomationClient({
   createSupplyNotificationSubscriptionAction,
   toggleSupplyNotificationSubscriptionAction,
   deleteSupplyNotificationSubscriptionAction,
+  readOnly = false,
 }: AutomationClientProps) {
   const router = useRouter();
   const [processFilter, setProcessFilter] = useState<ProcessFilter>('ALL');
@@ -263,6 +265,7 @@ export default function AutomationClient({
             <input
               type="email"
               value={email}
+              disabled={readOnly}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="farmacia@hospital.es"
             />
@@ -270,7 +273,12 @@ export default function AutomationClient({
 
           <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <small className="muted">Fecha fin de notificaciones</small>
-            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            <input
+              type="date"
+              value={endDate}
+              disabled={readOnly}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
           </label>
 
           <div className="actions-row" style={{ marginTop: 0 }}>
@@ -278,7 +286,7 @@ export default function AutomationClient({
               className="primary-button"
               type="button"
               onClick={handleCreateSubscription}
-              disabled={isPending && pendingSubscriptionAction === 'create'}
+              disabled={readOnly || (isPending && pendingSubscriptionAction === 'create')}
             >
               {isPending && pendingSubscriptionAction === 'create' ? 'Guardando…' : 'Guardar notificación'}
             </button>
@@ -286,6 +294,7 @@ export default function AutomationClient({
         </div>
 
         {subscriptionMessage ? <p className="muted">{subscriptionMessage}</p> : null}
+        {readOnly ? <p className="muted">Modo lectura: solo ADMIN puede gestionar suscripciones.</p> : null}
 
         {data.notificationSubscriptions.length === 0 ? (
           <p className="muted">Todavía no hay direcciones configuradas para recibir el digest diario.</p>
@@ -318,7 +327,7 @@ export default function AutomationClient({
                             className="secondary-button"
                             type="button"
                             onClick={() => handleToggleSubscription(subscription.id, !subscription.enabled)}
-                            disabled={isPending && pendingSubscriptionAction === toggleKey}
+                            disabled={readOnly || (isPending && pendingSubscriptionAction === toggleKey)}
                           >
                             {isPending && pendingSubscriptionAction === toggleKey
                               ? 'Guardando…'
@@ -330,7 +339,7 @@ export default function AutomationClient({
                             className="secondary-button"
                             type="button"
                             onClick={() => handleDeleteSubscription(subscription.id)}
-                            disabled={isPending && pendingSubscriptionAction === deleteKey}
+                            disabled={readOnly || (isPending && pendingSubscriptionAction === deleteKey)}
                           >
                             {isPending && pendingSubscriptionAction === deleteKey ? 'Eliminando…' : 'Eliminar'}
                           </button>

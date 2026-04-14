@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { getAdminAuthorizationResult } from '@/lib/authorization';
 import { prisma } from '@/lib/prisma';
 
 export type SupplyNotificationActionResult = {
@@ -43,6 +44,15 @@ export async function createSupplyNotificationSubscriptionAction(input: {
   email: string;
   endDate?: string | null;
 }): Promise<SupplyNotificationActionResult> {
+  const authorization = await getAdminAuthorizationResult();
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      message: authorization.message,
+    };
+  }
+
   const email = normalizeEmail(input.email);
 
   if (!email) {
@@ -109,6 +119,15 @@ export async function toggleSupplyNotificationSubscriptionAction(input: {
   id: string;
   enabled: boolean;
 }): Promise<SupplyNotificationActionResult> {
+  const authorization = await getAdminAuthorizationResult();
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      message: authorization.message,
+    };
+  }
+
   const id = input.id.trim();
   if (!id) {
     return {
@@ -134,6 +153,15 @@ export async function toggleSupplyNotificationSubscriptionAction(input: {
 export async function deleteSupplyNotificationSubscriptionAction(input: {
   id: string;
 }): Promise<SupplyNotificationActionResult> {
+  const authorization = await getAdminAuthorizationResult();
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      message: authorization.message,
+    };
+  }
+
   const id = input.id.trim();
   if (!id) {
     return {

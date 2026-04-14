@@ -7,6 +7,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AuthRole {
+  ADMIN
+  LECTURA
+}
+
+model AppUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String?
+  role         AuthRole @default(LECTURA)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([role, isActive])
+  @@map("app_users")
+}
+
 model ImportBatch {
   id                String           @id @default(cuid())
   originalFileName  String
@@ -347,14 +366,14 @@ model ExecutionLock {
 }
 
 model SupplyNotificationSubscription {
-  id          String                  @id @default(cuid())
-  email       String                  @unique
-  enabled     Boolean                 @default(true)
-  endDate     DateTime?
-  lastSentAt  DateTime?
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
-  runs        SupplyNotificationRun[]
+  id         String                  @id @default(cuid())
+  email      String                  @unique
+  enabled    Boolean                 @default(true)
+  endDate    DateTime?
+  lastSentAt DateTime?
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  runs       SupplyNotificationRun[]
 
   @@index([enabled])
   @@index([endDate])
@@ -362,18 +381,18 @@ model SupplyNotificationSubscription {
 }
 
 model SupplyNotificationRun {
-  id              String                         @id @default(cuid())
-  subscriptionId  String
-  windowStart     DateTime
-  windowEnd       DateTime
-  status          String                         @default("pending")
-  eventsCount     Int                            @default(0)
-  sentAt          DateTime?
-  errorMessage    String?
-  summaryJson     String?
-  createdAt       DateTime                       @default(now())
-  updatedAt       DateTime                       @updatedAt
-  subscription    SupplyNotificationSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  id             String                         @id @default(cuid())
+  subscriptionId String
+  windowStart    DateTime
+  windowEnd      DateTime
+  status         String                         @default("pending")
+  eventsCount    Int                            @default(0)
+  sentAt         DateTime?
+  errorMessage   String?
+  summaryJson    String?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  subscription   SupplyNotificationSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId, createdAt])
   @@index([status, createdAt])

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { requireAdminThrowing } from '@/lib/authorization';
 import { executeNomenclatorUpdate } from '@/lib/nomenclator-update';
 import {
   getMedicineAlternatives,
@@ -24,6 +25,8 @@ export type RunNomenclatorUpdateActionResult = {
 };
 
 export async function runSupplyMonitorAction(): Promise<RunSupplyMonitorActionResult> {
+  await requireAdminThrowing();
+
   const execution = await runScheduledJob({
     jobName: 'SUPPLY_MONITOR',
     triggerType: 'manual_http',
@@ -48,6 +51,8 @@ export async function runSupplyMonitorAction(): Promise<RunSupplyMonitorActionRe
 }
 
 export async function runNomenclatorUpdateAction(): Promise<RunNomenclatorUpdateActionResult> {
+  await requireAdminThrowing();
+
   const execution = await runScheduledJob({
     jobName: 'NOMENCLATOR_UPDATE',
     triggerType: 'manual_http',

@@ -22,6 +22,7 @@ type MonitorClientProps = {
   runNomenclatorUpdateAction: () => Promise<RunNomenclatorUpdateActionResult>;
   getMedicineAlternativesAction: (input: { cn: string }) => Promise<GetMedicineAlternativesOutput>;
   latestNomenclatorRun: NomenclatorJobRunOverview | null;
+  canManageManualActions: boolean;
 };
 
 type SortColumn = 'cn' | 'status' | 'shortDescription' | 'issueType' | 'startedAt' | 'expectedEndAt';
@@ -188,6 +189,7 @@ export default function MonitorClient({
   runNomenclatorUpdateAction,
   getMedicineAlternativesAction,
   latestNomenclatorRun,
+  canManageManualActions,
 }: MonitorClientProps) {
   const router = useRouter();
   const [monitorMessage, setMonitorMessage] = useState<string | null>(null);
@@ -408,7 +410,7 @@ export default function MonitorClient({
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={isMonitorRunning}
+              disabled={isMonitorRunning || !canManageManualActions}
               onClick={handleRunMonitor}
               style={
                 isMonitorRunning
@@ -425,6 +427,9 @@ export default function MonitorClient({
               {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
             </button>
           </div>
+          {!canManageManualActions ? (
+            <p className="muted">Modo lectura: solo ADMIN puede ejecutar el monitor manual.</p>
+          ) : null}
           {monitorMessage ? <p className="muted">{monitorMessage}</p> : null}
 
           {overview.latestRun ? (
@@ -474,7 +479,7 @@ export default function MonitorClient({
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={isNomenclatorRunning}
+              disabled={isNomenclatorRunning || !canManageManualActions}
               onClick={handleRunNomenclatorUpdate}
               style={
                 isNomenclatorRunning
@@ -495,6 +500,9 @@ export default function MonitorClient({
               lo descomprime y carga el archivo Prescripcion.xml
             </span>
           </div>
+          {!canManageManualActions ? (
+            <p className="muted">Modo lectura: solo ADMIN puede ejecutar la actualización manual del Nomenclátor.</p>
+          ) : null}
           {nomenclatorMessage ? <p className="muted">{nomenclatorMessage}</p> : null}
           {latestNomenclatorRun ? (
             <ul className="list compact-list" style={{ marginTop: 18 }}>

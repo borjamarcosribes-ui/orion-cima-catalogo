@@ -1,9 +1,20 @@
 'use server';
 
+import { getAdminAuthorizationResult } from '@/lib/authorization';
 import type { SaveTsvImportPayload, SaveTsvImportResult } from '@/lib/import/persistence';
 import { listTsvImportHistory, saveTsvImport } from '@/lib/tsv-imports';
 
 export async function saveTsvImportAction(payload: SaveTsvImportPayload): Promise<SaveTsvImportResult> {
+  const authorization = await getAdminAuthorizationResult();
+
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      message: authorization.message,
+      history: await listTsvImportHistory(),
+    };
+  }
+
   if (payload.errors.length > 0) {
     return {
       ok: false,

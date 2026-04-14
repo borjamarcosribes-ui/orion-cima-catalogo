@@ -1,6 +1,7 @@
 import ImportsClient from '@/app/importaciones/imports-client';
 import { saveTsvImportAction } from '@/app/importaciones/actions';
 import { getTsvImportPreviewById, listTsvImportHistory } from '@/lib/tsv-imports';
+import { auth } from '@/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,9 @@ type ImportsPageProps = {
 };
 
 export default async function ImportsPage({ searchParams }: ImportsPageProps) {
+  const session = await auth();
+  const canManage = session?.user?.role === 'ADMIN';
+
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const importId = resolvedSearchParams?.importId?.trim();
   const history = await listTsvImportHistory();
@@ -21,6 +25,7 @@ export default async function ImportsPage({ searchParams }: ImportsPageProps) {
       initialHistory={history}
       initialPersistedImport={initialPersistedImport}
       saveImportAction={saveTsvImportAction}
+      canManage={canManage}
     />
   );
 }
