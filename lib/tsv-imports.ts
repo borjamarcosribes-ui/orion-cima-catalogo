@@ -7,6 +7,9 @@ import type {
 import type { OrionCatalogItem, ParseError, ParseWarning } from '@/lib/import/types';
 import { syncWatchedMedicinesFromImport } from '@/lib/watched-medicines';
 
+const TSV_IMPORT_TRANSACTION_MAX_WAIT_MS = 5_000;
+const TSV_IMPORT_TRANSACTION_TIMEOUT_MS = 60_000;
+
 function mapHistoryEntry(entry: {
   id: string;
   fileName: string;
@@ -154,39 +157,45 @@ export async function getTsvImportPreviewById(importId: string): Promise<Persist
 }
 
 export async function saveTsvImport(payload: SaveTsvImportPayload): Promise<PersistedTsvImportHistoryEntry> {
-  const created = await prisma.$transaction(async (tx) => {
-    const savedImport = await tx.tsvImport.create({
-      data: {
-        fileName: payload.fileName,
-        rowCount: payload.rowCount,
-        validItems: payload.items.length,
-        duplicateCount: payload.duplicateCount,
-        warningCount: payload.warnings.length,
-        errorCount: payload.errors.length,
-        warningsJson: JSON.stringify(payload.warnings),
-        errorsJson: JSON.stringify(payload.errors),
-      },
-    });
-
-    if (payload.items.length > 0) {
-      await tx.tsvImportItem.createMany({
-        data: payload.items.map((item) => ({
-          tsvImportId: savedImport.id,
-          articleCode: item.articleCode,
-          shortDescription: item.shortDescription,
-          longDescription: item.longDescription,
-          unit: item.unit,
-          statusOriginal: item.statusOriginal,
-          statusNormalized: item.statusNormalized,
-          rowNumber: item.rowNumber,
-        })),
+  const created = await prisma.$transaction(
+    async (tx) => {
+      const savedImport = await tx.tsvImport.create({
+        data: {
+          fileName: payload.fileName,
+          rowCount: payload.rowCount,
+          validItems: payload.items.length,
+          duplicateCount: payload.duplicateCount,
+          warningCount: payload.warnings.length,
+          errorCount: payload.errors.length,
+          warningsJson: JSON.stringify(payload.warnings),
+          errorsJson: JSON.stringify(payload.errors),
+        },
       });
-    }
 
-    await syncWatchedMedicinesFromImport(tx, savedImport.id, payload.items, savedImport.importedAt);
+      if (payload.items.length > 0) {
+        await tx.tsvImportItem.createMany({
+          data: payload.items.map((item) => ({
+            tsvImportId: savedImport.id,
+            articleCode: item.articleCode,
+            shortDescription: item.shortDescription,
+            longDescription: item.longDescription,
+            unit: item.unit,
+            statusOriginal: item.statusOriginal,
+            statusNormalized: item.statusNormalized,
+            rowNumber: item.rowNumber,
+          })),
+        });
+      }
 
-    return savedImport;
-  });
+      await syncWatchedMedicinesFromImport(tx, savedImport.id, payload.items, savedImport.importedAt);
+
+      return savedImport;
+    },
+    {
+      maxWait: TSV_IMPORT_TRANSACTION_MAX_WAIT_MS,
+      timeout: TSV_IMPORT_TRANSACTION_TIMEOUT_MS,
+    },
+  );
 
   return mapHistoryEntry(created);
 }
