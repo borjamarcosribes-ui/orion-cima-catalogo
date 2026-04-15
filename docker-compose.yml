@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: integramedcum-app
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: file:/data/dev.db
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL}
+      CRON_SECRET: ${CRON_SECRET}
+      NOMENCLATOR_ZIP_URL: ${NOMENCLATOR_ZIP_URL}
+      NOMENCLATOR_XML_PATH: ${NOMENCLATOR_XML_PATH}
+      NOMENCLATOR_TEMP_DIR: ${NOMENCLATOR_TEMP_DIR}
+      MAIL_FROM: ${MAIL_FROM}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      NODE_ENV: production
+      PORT: 3000
+    expose:
+      - "3000"
+    volumes:
+      - sqlite_data:/data
+      - app_tmp:/app/tmp
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: integramedcum-proxy
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  sqlite_data:
+  app_tmp:
+  caddy_data:
+  caddy_config:

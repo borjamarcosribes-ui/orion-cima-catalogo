@@ -1,0 +1,5 @@
+catalogo.tu-dominio.es {
+  encode zstd gzip
+
+  reverse_proxy app:3000
+}
