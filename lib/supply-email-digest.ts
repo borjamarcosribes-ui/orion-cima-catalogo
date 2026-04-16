@@ -39,6 +39,20 @@ type ParsedSupplyState = {
   observations: string | null;
 };
 
+type SupplyDigestSourceEventRow = {
+  id: string;
+  cn: string;
+  eventType: string;
+  createdAt: Date;
+  previousStateJson: string | null;
+  currentStateJson: string | null;
+  watchedMedicine: {
+    articleCode: string;
+    shortDescription: string;
+    statusNormalized: string | null;
+  };
+};
+
 function parseStateJson(value: string | null): ParsedSupplyState | null {
   if (!value) {
     return null;
@@ -55,9 +69,12 @@ function parseStateJson(value: string | null): ParsedSupplyState | null {
       hasActiveSupplyIssue: Boolean(parsed.hasActiveSupplyIssue),
       issueType: typeof parsed.issueType === 'string' ? parsed.issueType : null,
       startedAt: typeof parsed.startedAt === 'string' ? parsed.startedAt : null,
-      expectedEndAt: typeof parsed.expectedEndAt === 'string' ? parsed.expectedEndAt : null,
-      resolvedAt: typeof parsed.resolvedAt === 'string' ? parsed.resolvedAt : null,
-      observations: typeof parsed.observations === 'string' ? parsed.observations : null,
+      expectedEndAt:
+        typeof parsed.expectedEndAt === 'string' ? parsed.expectedEndAt : null,
+      resolvedAt:
+        typeof parsed.resolvedAt === 'string' ? parsed.resolvedAt : null,
+      observations:
+        typeof parsed.observations === 'string' ? parsed.observations : null,
     };
   } catch {
     return null;
@@ -85,11 +102,15 @@ function toIsoOrNull(value: string | null): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
-function normalizeWatchedStatus(value: string | null | undefined): 'ACTIVO' | 'LAB' {
+function normalizeWatchedStatus(
+  value: string | null | undefined,
+): 'ACTIVO' | 'LAB' {
   return value === 'LAB' ? 'LAB' : 'ACTIVO';
 }
 
-function translateEventType(eventType: SupplyEventType): 'NUEVA ROTURA' | 'RESUELTO' | 'MODIFICACIÓN' {
+function translateEventType(
+  eventType: SupplyEventType,
+): 'NUEVA ROTURA' | 'RESUELTO' | 'MODIFICACIÓN' {
   switch (eventType) {
     case 'NEW_ISSUE':
       return 'NUEVA ROTURA';
@@ -135,9 +156,15 @@ function escapeHtml(value: string): string {
 function summarizeRows(rows: SupplyDigestEventRow[]): SupplyDigestSummary {
   return {
     totalEvents: rows.length,
-    newIssues: rows.filter((row) => row.eventType === 'NEW_ISSUE').length,
-    resolved: rows.filter((row) => row.eventType === 'RESOLVED').length,
-    changed: rows.filter((row) => row.eventType === 'CHANGED').length,
+    newIssues: rows.filter(
+      (row: SupplyDigestEventRow) => row.eventType === 'NEW_ISSUE',
+    ).length,
+    resolved: rows.filter(
+      (row: SupplyDigestEventRow) => row.eventType === 'RESOLVED',
+    ).length,
+    changed: rows.filter(
+      (row: SupplyDigestEventRow) => row.eventType === 'CHANGED',
+    ).length,
   };
 }
 
@@ -145,7 +172,7 @@ export async function getSupplyDigestPayload(input: {
   windowStart: Date;
   windowEnd: Date;
 }): Promise<SupplyDigestPayload> {
-  const events = await prisma.supplyMonitoringEvent.findMany({
+  const events = (await prisma.supplyMonitoringEvent.findMany({
     where: {
       createdAt: {
         gte: input.windowStart,
@@ -175,27 +202,33 @@ export async function getSupplyDigestPayload(input: {
         },
       },
     },
-  });
+  })) as SupplyDigestSourceEventRow[];
 
-  const rows: SupplyDigestEventRow[] = events.map((event) => {
-    const eventType = event.eventType as SupplyEventType;
-    const state = getRelevantStateForEvent(eventType, event.previousStateJson, event.currentStateJson);
+  const rows: SupplyDigestEventRow[] = events.map(
+    (event: SupplyDigestSourceEventRow) => {
+      const eventType = event.eventType as SupplyEventType;
+      const state = getRelevantStateForEvent(
+        eventType,
+        event.previousStateJson,
+        event.currentStateJson,
+      );
 
-    return {
-      id: event.id,
-      createdAt: event.createdAt.toISOString(),
-      eventType,
-      eventLabel: translateEventType(eventType),
-      cn: event.cn,
-      articleCode: event.watchedMedicine.articleCode,
-      status: normalizeWatchedStatus(event.watchedMedicine.statusNormalized),
-      shortDescription: event.watchedMedicine.shortDescription,
-      issueType: state?.issueType ?? null,
-      startedAt: toIsoOrNull(state?.startedAt ?? null),
-      expectedEndAt: toIsoOrNull(state?.expectedEndAt ?? null),
-      observations: state?.observations ?? null,
-    };
-  });
+      return {
+        id: event.id,
+        createdAt: event.createdAt.toISOString(),
+        eventType,
+        eventLabel: translateEventType(eventType),
+        cn: event.cn,
+        articleCode: event.watchedMedicine.articleCode,
+        status: normalizeWatchedStatus(event.watchedMedicine.statusNormalized),
+        shortDescription: event.watchedMedicine.shortDescription,
+        issueType: state?.issueType ?? null,
+        startedAt: toIsoOrNull(state?.startedAt ?? null),
+        expectedEndAt: toIsoOrNull(state?.expectedEndAt ?? null),
+        observations: state?.observations ?? null,
+      };
+    },
+  );
 
   return {
     windowStart: input.windowStart.toISOString(),
@@ -268,7 +301,7 @@ export function buildSupplyDigestHtml(payload: SupplyDigestPayload): string {
       `
       : payload.rows
           .map(
-            (row) => `
+            (row: SupplyDigestEventRow) => `
               <tr>
                 <td style="padding:10px 12px;border:1px solid #d9dde3;vertical-align:top;">${escapeHtml(formatDateTimeEs(row.createdAt))}</td>
                 <td style="padding:10px 12px;border:1px solid #d9dde3;vertical-align:top;">${escapeHtml(row.eventLabel)}</td>
