@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 import { prisma } from '@/lib/prisma';
 import type {
   PersistedTsvImportHistoryEntry,
@@ -158,7 +160,7 @@ export async function getTsvImportPreviewById(importId: string): Promise<Persist
 
 export async function saveTsvImport(payload: SaveTsvImportPayload): Promise<PersistedTsvImportHistoryEntry> {
   const created = await prisma.$transaction(
-    async (tx) => {
+    async (tx: Prisma.TransactionClient) => {
       const savedImport = await tx.tsvImport.create({
         data: {
           fileName: payload.fileName,
