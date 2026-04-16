@@ -387,25 +387,25 @@ const supplyMonitorRunById = new Map(
       id: string;
       checkedProducts: number;
       changedProducts: number;
-      totalIssues: number;
-      totalResolved: number;
-      startedAt: Date;
-      finishedAt: Date | null;
+      newIssues: number;
+      resolvedIssues: number;
     }) => [
       run.id,
       {
         checkedProducts: run.checkedProducts,
         changedProducts: run.changedProducts,
-        totalIssues: run.totalIssues,
-        totalResolved: run.totalResolved,
-        startedAt: run.startedAt,
-        finishedAt: run.finishedAt,
+        newIssues: run.newIssues,
+        resolvedIssues: run.resolvedIssues,
       },
-    ],
+    ] as const,
   ),
 );
 
-  const activeLockByKey = new Map(locks.map((lock) => [lock.key, lock]));
+const activeLockByKey = new Map(
+  locks.map(
+    (lock: { key: string; expiresAt: Date }) => [lock.key, lock] as const,
+  ),
+);
 
   return {
     summaryCards: [
