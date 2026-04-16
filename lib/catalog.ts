@@ -1,5 +1,3 @@
-import { Prisma } from '@prisma/client';
-
 import { prisma } from '@/lib/prisma';
 
 export type CatalogFilters = {
@@ -77,20 +75,45 @@ export type CatalogDetail = {
   }>;
 };
 
-type CatalogSqlRow = {
+type CatalogBaseRow = {
   cn: string;
-  displayName: string | null;
-  officialName: string | null;
+  codDcp: string;
   presentation: string;
+  officialName: string | null;
+  commercializationStatus: string;
+};
+
+type CatalogCimaRow = {
+  nationalCode: string;
+  officialName: string | null;
   activeIngredient: string | null;
   laboratory: string | null;
   atcCode: string | null;
-  commercializationStatus: string;
-  watchedCn: string | null;
-  statusOriginal: string | null;
-  shortDescription: string | null;
-  fundingStatus: string | null;
+  commercializationStatus: string | null;
+  supplyStatus: string | null;
+  technicalSheetUrl: string | null;
+  leafletUrl: string | null;
+  leafletHtmlUrl: string | null;
+  htmlUrl: string | null;
+  pdfUrl: string | null;
+};
+
+type CatalogWatchedRow = {
+  cn: string;
+  articleCode: string;
+  shortDescription: string;
+  statusOriginal: string;
+  lastSeenAt: Date;
+};
+
+type CatalogBifimedRow = {
+  cn: string;
+  fundingStatus: string;
+  fundingModality: string | null;
   summary: string | null;
+  restrictedConditions: string | null;
+  specialFundingConditions: string | null;
+  nomenclatorState: string | null;
 };
 
 function normalizePage(input?: number): number {
@@ -109,105 +132,48 @@ function normalizePageSize(input?: number): number {
   return Math.min(Math.trunc(input), 60);
 }
 
-function toLike(value: string): string {
-  return `%${value.trim().toLowerCase()}%`;
+function normalizeIso(date: Date | null | undefined): string | null {
+  if (!date) {
+    return null;
+  }
+
+  return date.toISOString();
 }
 
-function pushLikeClause(clauses: any[], sqlField: any, value?: string): void {
-  if (!value || value.trim().length === 0) {
-    return;
-  }
-
-  clauses.push(Prisma.sql`LOWER(${sqlField}) LIKE ${toLike(value)}`);
+function normalizeSearchValue(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
 }
 
-function buildCatalogWhere(filters: CatalogFilters): any {
-  const clauses: any[] = [];
-
-  if (filters.q && filters.q.trim().length > 0) {
-    const likeValue = toLike(filters.q);
-    clauses.push(
-      Prisma.sql`(
-        LOWER(n.cn) LIKE ${likeValue}
-        OR LOWER(COALESCE(c.officialName, n.officialName, n.presentation)) LIKE ${likeValue}
-        OR LOWER(n.presentation) LIKE ${likeValue}
-        OR LOWER(COALESCE(w.shortDescription, '')) LIKE ${likeValue}
-      )`,
-    );
+function includesSearch(haystack: string | null | undefined, needle?: string): boolean {
+  if (!needle || needle.trim().length === 0) {
+    return true;
   }
 
-  pushLikeClause(clauses, Prisma.sql`n.cn`, filters.cn);
-  pushLikeClause(
-    clauses,
-    Prisma.sql`COALESCE(c.activeIngredient, '')`,
-    filters.activeIngredient,
-  );
-  pushLikeClause(
-    clauses,
-    Prisma.sql`COALESCE(c.laboratory, '')`,
-    filters.laboratory,
-  );
-  pushLikeClause(clauses, Prisma.sql`COALESCE(c.atcCode, '')`, filters.atc);
+  return normalizeSearchValue(haystack).includes(normalizeSearchValue(needle));
+}
 
-  if (
-    filters.commercializationStatus &&
-    filters.commercializationStatus.trim().length > 0
-  ) {
-    clauses.push(
-      Prisma.sql`n.commercializationStatus = ${filters.commercializationStatus}`,
-    );
+function matchesHospitalStatus(
+  statusOriginal: string | null,
+  requestedStatus?: string,
+): boolean {
+  if (!requestedStatus || requestedStatus.trim().length === 0) {
+    return true;
   }
 
-  if (filters.includedInHospital === 'SI') {
-    clauses.push(Prisma.sql`w.cn IS NOT NULL`);
-  }
+  const normalized = normalizeSearchValue(statusOriginal);
 
-  if (filters.includedInHospital === 'NO') {
-    clauses.push(Prisma.sql`w.cn IS NULL`);
+  switch (requestedStatus) {
+    case 'ACTIVO':
+      return normalized === 'activo';
+    case 'INACTIVO':
+      return normalized === 'inactivo';
+    case 'LAB':
+      return normalized === 'lab';
+    case 'OTROS':
+      return normalized.length > 0 && !['activo', 'inactivo', 'lab'].includes(normalized);
+    default:
+      return true;
   }
-
-  if (filters.includedInHospital === 'SI') {
-    switch (filters.hospitalStatus) {
-      case 'ACTIVO':
-        clauses.push(
-          Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'activo'`,
-        );
-        break;
-      case 'INACTIVO':
-        clauses.push(
-          Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'inactivo'`,
-        );
-        break;
-      case 'LAB':
-        clauses.push(
-          Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'lab'`,
-        );
-        break;
-      case 'OTROS':
-        clauses.push(
-          Prisma.sql`(
-            TRIM(COALESCE(w.statusOriginal, '')) <> ''
-            AND LOWER(TRIM(COALESCE(w.statusOriginal, ''))) NOT IN ('activo', 'inactivo', 'lab')
-          )`,
-        );
-        break;
-      default:
-        break;
-    }
-  }
-
-  if (
-    filters.bifimedFundingStatus &&
-    filters.bifimedFundingStatus.trim().length > 0
-  ) {
-    clauses.push(Prisma.sql`b.fundingStatus = ${filters.bifimedFundingStatus}`);
-  }
-
-  if (clauses.length === 0) {
-    return Prisma.sql`1 = 1`;
-  }
-
-  return Prisma.join(clauses, ' AND ');
 }
 
 export async function listCatalogByCn(
@@ -215,71 +181,171 @@ export async function listCatalogByCn(
 ): Promise<CatalogListResult> {
   const page = normalizePage(filters.page);
   const pageSize = normalizePageSize(filters.pageSize);
+
+  const [nomenclatorRows, cimaRows, watchedRows, bifimedRows] = await Promise.all([
+    prisma.nomenclatorProduct.findMany({
+      select: {
+        cn: true,
+        codDcp: true,
+        presentation: true,
+        officialName: true,
+        commercializationStatus: true,
+      },
+      orderBy: { cn: 'asc' },
+    }),
+    prisma.cimaCache.findMany({
+      select: {
+        nationalCode: true,
+        officialName: true,
+        activeIngredient: true,
+        laboratory: true,
+        atcCode: true,
+        commercializationStatus: true,
+        supplyStatus: true,
+        technicalSheetUrl: true,
+        leafletUrl: true,
+        leafletHtmlUrl: true,
+        htmlUrl: true,
+        pdfUrl: true,
+      },
+    }),
+    prisma.watchedMedicine.findMany({
+      select: {
+        cn: true,
+        articleCode: true,
+        shortDescription: true,
+        statusOriginal: true,
+        lastSeenAt: true,
+      },
+    }),
+    prisma.bifimedCache.findMany({
+      select: {
+        cn: true,
+        fundingStatus: true,
+        fundingModality: true,
+        summary: true,
+        restrictedConditions: true,
+        specialFundingConditions: true,
+        nomenclatorState: true,
+      },
+    }),
+  ]);
+
+  const cimaByCn = new Map<string, CatalogCimaRow>(
+    cimaRows.map((row) => [row.nationalCode, row]),
+  );
+
+  const watchedByCn = new Map<string, CatalogWatchedRow>(
+    watchedRows.map((row) => [row.cn, row]),
+  );
+
+  const bifimedByCn = new Map<string, CatalogBifimedRow>(
+    bifimedRows.map((row) => [row.cn, row]),
+  );
+
+  const mergedRows: CatalogListItem[] = nomenclatorRows.map((row: CatalogBaseRow) => {
+    const cima = cimaByCn.get(row.cn) ?? null;
+    const watched = watchedByCn.get(row.cn) ?? null;
+    const bifimed = bifimedByCn.get(row.cn) ?? null;
+
+    return {
+      cn: row.cn,
+      displayName:
+        cima?.officialName ??
+        row.officialName ??
+        row.presentation,
+      officialName: cima?.officialName ?? row.officialName,
+      presentation: row.presentation,
+      activeIngredient: cima?.activeIngredient ?? null,
+      laboratory: cima?.laboratory ?? null,
+      atcCode: cima?.atcCode ?? null,
+      commercializationStatus:
+        cima?.commercializationStatus ?? row.commercializationStatus,
+      includedInHospital: Boolean(watched),
+      hospitalStatusOriginal: watched?.statusOriginal ?? null,
+      hospitalDescription: watched?.shortDescription ?? null,
+      bifimedFundingStatus: bifimed?.fundingStatus ?? null,
+      bifimedSummary: bifimed?.summary ?? null,
+    };
+  });
+
+  const filteredRows = mergedRows.filter((row) => {
+    if (
+      filters.commercializationStatus &&
+      filters.commercializationStatus.trim().length > 0 &&
+      row.commercializationStatus !== filters.commercializationStatus
+    ) {
+      return false;
+    }
+
+    if (filters.includedInHospital === 'SI' && !row.includedInHospital) {
+      return false;
+    }
+
+    if (filters.includedInHospital === 'NO' && row.includedInHospital) {
+      return false;
+    }
+
+    if (
+      filters.includedInHospital === 'SI' &&
+      !matchesHospitalStatus(row.hospitalStatusOriginal, filters.hospitalStatus)
+    ) {
+      return false;
+    }
+
+    if (
+      filters.bifimedFundingStatus &&
+      filters.bifimedFundingStatus.trim().length > 0 &&
+      row.bifimedFundingStatus !== filters.bifimedFundingStatus
+    ) {
+      return false;
+    }
+
+    if (!includesSearch(row.cn, filters.cn)) {
+      return false;
+    }
+
+    if (!includesSearch(row.activeIngredient, filters.activeIngredient)) {
+      return false;
+    }
+
+    if (!includesSearch(row.laboratory, filters.laboratory)) {
+      return false;
+    }
+
+    if (!includesSearch(row.atcCode, filters.atc)) {
+      return false;
+    }
+
+    if (filters.q && filters.q.trim().length > 0) {
+      const q = filters.q;
+      const matchesQ =
+        includesSearch(row.cn, q) ||
+        includesSearch(row.displayName, q) ||
+        includesSearch(row.officialName, q) ||
+        includesSearch(row.presentation, q) ||
+        includesSearch(row.hospitalDescription, q);
+
+      if (!matchesQ) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  filteredRows.sort((left, right) => left.cn.localeCompare(right.cn));
+
+  const total = filteredRows.length;
   const offset = (page - 1) * pageSize;
-  const whereClause = buildCatalogWhere(filters);
-
-  const rows = await prisma.$queryRaw<CatalogSqlRow[]>`
-    SELECT
-      n.cn,
-      COALESCE(c.officialName, n.officialName, n.presentation) AS displayName,
-      c.officialName,
-      n.presentation,
-      c.activeIngredient,
-      c.laboratory,
-      c.atcCode,
-      n.commercializationStatus,
-      w.cn AS "watchedCn",
-      w.statusOriginal,
-      w.shortDescription,
-      b.fundingStatus,
-      b.summary
-    FROM nomenclator_products n
-    LEFT JOIN cima_cache c ON c.nationalCode = n.cn
-    LEFT JOIN watched_medicines w ON w.cn = n.cn
-    LEFT JOIN bifimed_cache b ON b.cn = n.cn
-    WHERE ${whereClause}
-    ORDER BY n.cn ASC
-    LIMIT ${pageSize}
-    OFFSET ${offset}
-  `;
-
-  const countResult = await prisma.$queryRaw<Array<{ total: number }>>`
-    SELECT COUNT(*) as total
-    FROM nomenclator_products n
-    LEFT JOIN cima_cache c ON c.nationalCode = n.cn
-    LEFT JOIN watched_medicines w ON w.cn = n.cn
-    LEFT JOIN bifimed_cache b ON b.cn = n.cn
-    WHERE ${whereClause}
-  `;
+  const rows = filteredRows.slice(offset, offset + pageSize);
 
   return {
-    rows: rows.map((row) => ({
-      cn: row.cn,
-      displayName: row.displayName ?? row.presentation,
-      officialName: row.officialName,
-      presentation: row.presentation,
-      activeIngredient: row.activeIngredient,
-      laboratory: row.laboratory,
-      atcCode: row.atcCode,
-      commercializationStatus: row.commercializationStatus,
-      includedInHospital: Boolean(row.watchedCn),
-      hospitalStatusOriginal: row.statusOriginal,
-      hospitalDescription: row.shortDescription,
-      bifimedFundingStatus: row.fundingStatus,
-      bifimedSummary: row.summary,
-    })),
-    total: Number(countResult[0]?.total ?? 0),
+    rows,
+    total,
     page,
     pageSize,
   };
-}
-
-function normalizeIso(date: Date | null | undefined): string | null {
-  if (!date) {
-    return null;
-  }
-
-  return date.toISOString();
 }
 
 export async function getCatalogDetailByCn(
@@ -339,7 +405,8 @@ export async function getCatalogDetailByCn(
     laboratory: cima?.laboratory ?? null,
     atcCode: cima?.atcCode ?? null,
     codDcp: nomenclator.codDcp,
-    commercializationStatus: nomenclator.commercializationStatus,
+    commercializationStatus:
+      cima?.commercializationStatus ?? nomenclator.commercializationStatus,
     supplyStatus: cima?.supplyStatus ?? null,
     includedInHospital: Boolean(watched),
     hospitalStatusOriginal: watched?.statusOriginal ?? null,
