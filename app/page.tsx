@@ -184,8 +184,8 @@ export default async function DashboardPage() {
   const activeStatusShortages = toNumber(activeIssueRow?.activeStatusShortages);
   const labStatusShortages = toNumber(activeIssueRow?.labStatusShortages);
 
-  const newIssues7d = recentEvents.filter((event) => event.eventType === 'NEW_ISSUE').length;
-  const resolvedIssues7d = recentEvents.filter((event) => event.eventType === 'RESOLVED').length;
+  const newIssues7d = recentEvents.filter((event: { eventType: string }) => event.eventType === 'NEW_ISSUE').length;
+  const resolvedIssues7d = recentEvents.filter((event: { eventType: string }) => event.eventType === 'RESOLVED').length;
 
   const enrichedActiveShortages: EnrichedActiveShortageRow[] = activeShortages
     .map((item) => ({
