@@ -184,23 +184,33 @@ export default async function DashboardPage() {
   const activeStatusShortages = toNumber(activeIssueRow?.activeStatusShortages);
   const labStatusShortages = toNumber(activeIssueRow?.labStatusShortages);
 
-  const newIssues7d = recentEvents.filter((event: { eventType: string }) => event.eventType === 'NEW_ISSUE').length;
-  const resolvedIssues7d = recentEvents.filter((event: { eventType: string }) => event.eventType === 'RESOLVED').length;
+const newIssues7d = recentEvents.filter(
+  (event: { eventType: string }) => event.eventType === 'NEW_ISSUE',
+).length;
 
-  const enrichedActiveShortages: EnrichedActiveShortageRow[] = activeShortages
-  .map((item: ActiveShortageRow) => ({
+const resolvedIssues7d = recentEvents.filter(
+  (event: { eventType: string }) => event.eventType === 'RESOLVED',
+).length;
+
+const enrichedActiveShortages: EnrichedActiveShortageRow[] = activeShortages
+  .map((item: ActiveShortageRow): EnrichedActiveShortageRow => ({
     cn: item.cn,
     displayName: item.displayName,
     hospitalStatusOriginal: item.hospitalStatusOriginal,
     daysInIssue: calculateDaysInIssue(item.startedAt, now),
   }))
-    .sort((a, b) => b.daysInIssue - a.daysInIssue || a.cn.localeCompare(b.cn));
+  .sort(
+    (a: EnrichedActiveShortageRow, b: EnrichedActiveShortageRow) =>
+      b.daysInIssue - a.daysInIssue || a.cn.localeCompare(b.cn),
+  );
 
-  const averageAge =
-    enrichedActiveShortages.length > 0
-      ? enrichedActiveShortages.reduce((sum, item) => sum + item.daysInIssue, 0) / enrichedActiveShortages.length
-      : 0;
-
+const averageAge =
+  enrichedActiveShortages.length > 0
+    ? enrichedActiveShortages.reduce(
+        (sum: number, item: EnrichedActiveShortageRow) => sum + item.daysInIssue,
+        0,
+      ) / enrichedActiveShortages.length
+    : 0;
   const longestShortages = enrichedActiveShortages.slice(0, 10);
 
   return (
