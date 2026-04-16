@@ -381,17 +381,29 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
       })
     : [];
 
-  const supplyMonitorRunById = new Map(
-    supplyMonitorRuns.map((run) => [
+const supplyMonitorRunById = new Map(
+  supplyMonitorRuns.map(
+    (run: {
+      id: string;
+      checkedProducts: number;
+      changedProducts: number;
+      totalIssues: number;
+      totalResolved: number;
+      startedAt: Date;
+      finishedAt: Date | null;
+    }) => [
       run.id,
       {
         checkedProducts: run.checkedProducts,
         changedProducts: run.changedProducts,
-        newIssues: run.newIssues,
-        resolvedIssues: run.resolvedIssues,
+        totalIssues: run.totalIssues,
+        totalResolved: run.totalResolved,
+        startedAt: run.startedAt,
+        finishedAt: run.finishedAt,
       },
-    ]),
-  );
+    ],
+  ),
+);
 
   const activeLockByKey = new Map(locks.map((lock) => [lock.key, lock]));
 
