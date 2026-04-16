@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "@prisma/client": "6.6.0",
+    "bcryptjs": "^3.0.3",
     "next": "15.2.4",
+    "next-auth": "^4.24.14",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "xlsx": "0.18.5",
