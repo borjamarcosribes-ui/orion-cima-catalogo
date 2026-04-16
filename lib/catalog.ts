@@ -144,7 +144,10 @@ function normalizeSearchValue(value: string | null | undefined): string {
   return (value ?? '').trim().toLowerCase();
 }
 
-function includesSearch(haystack: string | null | undefined, needle?: string): boolean {
+function includesSearch(
+  haystack: string | null | undefined,
+  needle?: string,
+): boolean {
   if (!needle || needle.trim().length === 0) {
     return true;
   }
@@ -170,7 +173,10 @@ function matchesHospitalStatus(
     case 'LAB':
       return normalized === 'lab';
     case 'OTROS':
-      return normalized.length > 0 && !['activo', 'inactivo', 'lab'].includes(normalized);
+      return (
+        normalized.length > 0 &&
+        !['activo', 'inactivo', 'lab'].includes(normalized)
+      );
     default:
       return true;
   }
@@ -182,94 +188,95 @@ export async function listCatalogByCn(
   const page = normalizePage(filters.page);
   const pageSize = normalizePageSize(filters.pageSize);
 
-  const [nomenclatorRows, cimaRows, watchedRows, bifimedRows] = await Promise.all([
-    prisma.nomenclatorProduct.findMany({
-      select: {
-        cn: true,
-        codDcp: true,
-        presentation: true,
-        officialName: true,
-        commercializationStatus: true,
-      },
-      orderBy: { cn: 'asc' },
-    }),
-    prisma.cimaCache.findMany({
-      select: {
-        nationalCode: true,
-        officialName: true,
-        activeIngredient: true,
-        laboratory: true,
-        atcCode: true,
-        commercializationStatus: true,
-        supplyStatus: true,
-        technicalSheetUrl: true,
-        leafletUrl: true,
-        leafletHtmlUrl: true,
-        htmlUrl: true,
-        pdfUrl: true,
-      },
-    }),
-    prisma.watchedMedicine.findMany({
-      select: {
-        cn: true,
-        articleCode: true,
-        shortDescription: true,
-        statusOriginal: true,
-        lastSeenAt: true,
-      },
-    }),
-    prisma.bifimedCache.findMany({
-      select: {
-        cn: true,
-        fundingStatus: true,
-        fundingModality: true,
-        summary: true,
-        restrictedConditions: true,
-        specialFundingConditions: true,
-        nomenclatorState: true,
-      },
-    }),
-  ]);
+  const [nomenclatorRows, cimaRows, watchedRows, bifimedRows] =
+    await Promise.all([
+      prisma.nomenclatorProduct.findMany({
+        select: {
+          cn: true,
+          codDcp: true,
+          presentation: true,
+          officialName: true,
+          commercializationStatus: true,
+        },
+        orderBy: { cn: 'asc' },
+      }),
+      prisma.cimaCache.findMany({
+        select: {
+          nationalCode: true,
+          officialName: true,
+          activeIngredient: true,
+          laboratory: true,
+          atcCode: true,
+          commercializationStatus: true,
+          supplyStatus: true,
+          technicalSheetUrl: true,
+          leafletUrl: true,
+          leafletHtmlUrl: true,
+          htmlUrl: true,
+          pdfUrl: true,
+        },
+      }),
+      prisma.watchedMedicine.findMany({
+        select: {
+          cn: true,
+          articleCode: true,
+          shortDescription: true,
+          statusOriginal: true,
+          lastSeenAt: true,
+        },
+      }),
+      prisma.bifimedCache.findMany({
+        select: {
+          cn: true,
+          fundingStatus: true,
+          fundingModality: true,
+          summary: true,
+          restrictedConditions: true,
+          specialFundingConditions: true,
+          nomenclatorState: true,
+        },
+      }),
+    ]);
 
   const cimaByCn = new Map<string, CatalogCimaRow>(
-    cimaRows.map((row) => [row.nationalCode, row]),
+    cimaRows.map((row: CatalogCimaRow) => [row.nationalCode, row] as const),
   );
 
   const watchedByCn = new Map<string, CatalogWatchedRow>(
-    watchedRows.map((row) => [row.cn, row]),
+    watchedRows.map((row: CatalogWatchedRow) => [row.cn, row] as const),
   );
 
   const bifimedByCn = new Map<string, CatalogBifimedRow>(
-    bifimedRows.map((row) => [row.cn, row]),
+    bifimedRows.map((row: CatalogBifimedRow) => [row.cn, row] as const),
   );
 
-  const mergedRows: CatalogListItem[] = nomenclatorRows.map((row: CatalogBaseRow) => {
-    const cima = cimaByCn.get(row.cn) ?? null;
-    const watched = watchedByCn.get(row.cn) ?? null;
-    const bifimed = bifimedByCn.get(row.cn) ?? null;
+  const mergedRows: CatalogListItem[] = nomenclatorRows.map(
+    (row: CatalogBaseRow) => {
+      const cima = cimaByCn.get(row.cn) ?? null;
+      const watched = watchedByCn.get(row.cn) ?? null;
+      const bifimed = bifimedByCn.get(row.cn) ?? null;
 
-    return {
-      cn: row.cn,
-      displayName:
-        cima?.officialName ??
-        row.officialName ??
-        row.presentation,
-      officialName: cima?.officialName ?? row.officialName,
-      presentation: row.presentation,
-      activeIngredient: cima?.activeIngredient ?? null,
-      laboratory: cima?.laboratory ?? null,
-      atcCode: cima?.atcCode ?? null,
-      commercializationStatus:
-        cima?.commercializationStatus ?? row.commercializationStatus,
-      includedInHospital: Boolean(watched),
-      hospitalStatusOriginal: watched?.statusOriginal ?? null,
-      hospitalDescription: watched?.shortDescription ?? null,
-      bifimedFundingStatus: bifimed?.fundingStatus ?? null,
-      bifimedSummary: bifimed?.summary ?? null,
-    };
-  });
+      return {
+        cn: row.cn,
+        displayName:
+          cima?.officialName ?? row.officialName ?? row.presentation,
+        officialName: cima?.officialName ?? row.officialName,
+        presentation: row.presentation,
+        activeIngredient: cima?.activeIngredient ?? null,
+        laboratory: cima?.laboratory ?? null,
+        atcCode: cima?.atcCode ?? null,
+        commercializationStatus:
+          cima?.commercializationStatus ?? row.commercializationStatus,
+        includedInHospital: Boolean(watched),
+        hospitalStatusOriginal: watched?.statusOriginal ?? null,
+        hospitalDescription: watched?.shortDescription ?? null,
+        bifimedFundingStatus: bifimed?.fundingStatus ?? null,
+        bifimedSummary: bifimed?.summary ?? null,
+      };
+    },
+  );
 
-  const filteredRows = mergedRows.filter((row) => {
+  const filteredRows = mergedRows.filter((row: CatalogListItem) => {
     if (
       filters.commercializationStatus &&
       filters.commercializationStatus.trim().length > 0 &&
@@ -288,7 +295,10 @@ export async function listCatalogByCn(
 
     if (
       filters.includedInHospital === 'SI' &&
-      !matchesHospitalStatus(row.hospitalStatusOriginal, filters.hospitalStatus)
+      !matchesHospitalStatus(
+        row.hospitalStatusOriginal,
+        filters.hospitalStatus,
+      )
     ) {
       return false;
     }
@@ -334,7 +344,9 @@ export async function listCatalogByCn(
     return true;
   });
 
-  filteredRows.sort((left, right) => left.cn.localeCompare(right.cn));
+  filteredRows.sort((left: CatalogListItem, right: CatalogListItem) =>
+    left.cn.localeCompare(right.cn),
+  );
 
   const total = filteredRows.length;
   const offset = (page - 1) * pageSize;
@@ -399,7 +411,9 @@ export async function getCatalogDetailByCn(
   return {
     cn: nomenclator.cn,
     officialName:
-      cima?.officialName ?? nomenclator.officialName ?? nomenclator.presentation,
+      cima?.officialName ??
+      nomenclator.officialName ??
+      nomenclator.presentation,
     presentation: nomenclator.presentation,
     activeIngredient: cima?.activeIngredient ?? null,
     laboratory: cima?.laboratory ?? null,
@@ -418,21 +432,31 @@ export async function getCatalogDetailByCn(
     bifimedSummary: bifimed?.summary ?? null,
     bifimedModality: bifimed?.fundingModality ?? null,
     bifimedRestrictedConditions: bifimed?.restrictedConditions ?? null,
-    bifimedSpecialFundingConditions: bifimed?.specialFundingConditions ?? null,
+    bifimedSpecialFundingConditions:
+      bifimed?.specialFundingConditions ?? null,
     bifimedNomenclatorState: bifimed?.nomenclatorState ?? null,
-    bifimedIndications: bifimedIndications.map((item) => ({
-      authorizedIndication: item.authorizedIndication,
-      indicationFileStatus: item.indicationFileStatus ?? null,
-      indicationFundingResolution: item.indicationFundingResolution ?? null,
-    })),
+    bifimedIndications: bifimedIndications.map(
+      (item: {
+        authorizedIndication: string;
+        indicationFileStatus: string | null;
+        indicationFundingResolution: string | null;
+      }) => ({
+        authorizedIndication: item.authorizedIndication,
+        indicationFileStatus: item.indicationFileStatus ?? null,
+        indicationFundingResolution:
+          item.indicationFundingResolution ?? null,
+      }),
+    ),
     technicalSheetUrl: cima?.technicalSheetUrl ?? null,
     leafletUrl: cima?.leafletUrl ?? null,
     leafletHtmlUrl: cima?.leafletHtmlUrl ?? null,
     docsHtmlUrl: cima?.htmlUrl ?? null,
     docsPdfUrl: cima?.pdfUrl ?? null,
-    cimaCharacteristics: cimaCharacteristics.map((item) => ({
-      label: item.label,
-      normalizedLabel: item.normalizedLabel,
-    })),
+    cimaCharacteristics: cimaCharacteristics.map(
+      (item: { label: string; normalizedLabel: string }) => ({
+        label: item.label,
+        normalizedLabel: item.normalizedLabel,
+      }),
+    ),
   };
 }
