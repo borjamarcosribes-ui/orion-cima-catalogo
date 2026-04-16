@@ -1,10 +1,13 @@
-import NextAuth from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
+import type { NextAuthOptions } from 'next-auth';
+import { getServerSession } from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 
 import { prisma } from '@/lib/prisma';
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+type AppRole = 'ADMIN' | 'LECTURA';
+
+export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
@@ -12,15 +15,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     signIn: '/login',
   },
   providers: [
-    Credentials({
+    CredentialsProvider({
       name: 'Credenciales',
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Contraseña', type: 'password' },
       },
-      authorize: async (credentials) => {
-        const email = typeof credentials?.email === 'string' ? credentials.email.trim().toLowerCase() : '';
-        const password = typeof credentials?.password === 'string' ? credentials.password : '';
+      async authorize(credentials) {
+        const email =
+          typeof credentials?.email === 'string'
+            ? credentials.email.trim().toLowerCase()
+            : '';
+        const password =
+          typeof credentials?.password === 'string'
+            ? credentials.password
+            : '';
 
         if (!email || !password) {
           return null;
@@ -51,23 +60,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.displayName ?? user.email,
-          role: user.role,
+          role: user.role as AppRole,
         };
       },
     }),
   ],
   callbacks: {
-    jwt: async ({ token, user }) => {
+    async jwt({ token, user }) {
       if (user) {
-        token.role = (user as { role?: 'ADMIN' | 'LECTURA' }).role ?? 'LECTURA';
+        (token as typeof token & { role?: AppRole }).role =
+          (user as { role?: AppRole }).role ?? 'LECTURA';
       }
+
       return token;
     },
-    session: async ({ session, token }) => {
+    async session({ session, token }) {
       if (session.user) {
-        session.user.role = (token.role as 'ADMIN' | 'LECTURA') ?? 'LECTURA';
+        (
+          session.user as typeof session.user & { role?: AppRole }
+        ).role = ((token as { role?: AppRole }).role ?? 'LECTURA') as AppRole;
       }
+
       return session;
     },
   },
-});
+};
+
+export function auth() {
+  return getServerSession(authOptions);
+}

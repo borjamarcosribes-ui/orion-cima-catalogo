@@ -1,4 +1,4 @@
-import type { Prisma } from '@/generated/postgres-client';
+import { Prisma } from '@prisma/client';
 
 import { prisma } from '@/lib/prisma';
 import {
