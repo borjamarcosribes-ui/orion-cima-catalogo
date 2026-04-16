@@ -10,14 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "import:nomenclator": "node scripts/import-nomenclator.cjs",
-    "backfill:cima": "node scripts/backfill-cima-cache.mjs",
-    "backfill:bifimed": "node scripts/backfill-bifimed-cache.mjs"
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "6.6.0",
-    "bcryptjs": "^3.0.3",
     "next": "15.2.4",
-    "next-auth": "^5.0.0-beta.30",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "xlsx": "0.18.5",

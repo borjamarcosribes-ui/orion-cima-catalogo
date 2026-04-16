@@ -7,6 +7,11 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+COPY prisma ./prisma
+
+ARG DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
+ENV DATABASE_URL=$DATABASE_URL
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm ci --include=dev
 
