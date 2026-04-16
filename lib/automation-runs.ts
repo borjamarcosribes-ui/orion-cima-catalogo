@@ -362,7 +362,7 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
 
   const supplyMonitorRunIds = recentRuns
     .map((run: { summaryJson: string | null }) => parseJsonObject(run.summaryJson).supplyMonitorRunId)
-    .filter((value): value is string => typeof value === 'string');
+    .filter((value: unknown): value is string => typeof value === 'string');
 
   const supplyMonitorRuns = supplyMonitorRunIds.length
     ? await prisma.supplyMonitorRun.findMany({
