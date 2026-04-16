@@ -23,6 +23,19 @@ services:
       - sqlite_data:/data
       - app_tmp:/app/tmp
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: integramedcum-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   proxy:
     image: caddy:2-alpine
     container_name: integramedcum-proxy
@@ -39,6 +52,7 @@ services:
 
 volumes:
   sqlite_data:
+  postgres_data:
   app_tmp:
   caddy_data:
   caddy_config:
