@@ -93,8 +93,6 @@ type CatalogSqlRow = {
   summary: string | null;
 };
 
-type SqlFragment = ReturnType<typeof Prisma.sql>;
-
 function normalizePage(input?: number): number {
   if (!input || Number.isNaN(input) || input < 1) {
     return 1;
@@ -115,11 +113,7 @@ function toLike(value: string): string {
   return `%${value.trim().toLowerCase()}%`;
 }
 
-function pushLikeClause(
-  clauses: SqlFragment[],
-  sqlField: SqlFragment,
-  value?: string,
-): void {
+function pushLikeClause(clauses: any[], sqlField: any, value?: string): void {
   if (!value || value.trim().length === 0) {
     return;
   }
@@ -127,8 +121,8 @@ function pushLikeClause(
   clauses.push(Prisma.sql`LOWER(${sqlField}) LIKE ${toLike(value)}`);
 }
 
-function buildCatalogWhere(filters: CatalogFilters): SqlFragment {
-  const clauses: SqlFragment[] = [];
+function buildCatalogWhere(filters: CatalogFilters): any {
+  const clauses: any[] = [];
 
   if (filters.q && filters.q.trim().length > 0) {
     const likeValue = toLike(filters.q);
