@@ -93,6 +93,8 @@ type CatalogSqlRow = {
   summary: string | null;
 };
 
+type SqlFragment = ReturnType<typeof Prisma.sql>;
+
 function normalizePage(input?: number): number {
   if (!input || Number.isNaN(input) || input < 1) {
     return 1;
@@ -113,7 +115,11 @@ function toLike(value: string): string {
   return `%${value.trim().toLowerCase()}%`;
 }
 
-function pushLikeClause(clauses: Prisma.Sql[], sqlField: Prisma.Sql, value?: string): void {
+function pushLikeClause(
+  clauses: SqlFragment[],
+  sqlField: SqlFragment,
+  value?: string,
+): void {
   if (!value || value.trim().length === 0) {
     return;
   }
@@ -121,8 +127,8 @@ function pushLikeClause(clauses: Prisma.Sql[], sqlField: Prisma.Sql, value?: str
   clauses.push(Prisma.sql`LOWER(${sqlField}) LIKE ${toLike(value)}`);
 }
 
-function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
-  const clauses: Prisma.Sql[] = [];
+function buildCatalogWhere(filters: CatalogFilters): SqlFragment {
+  const clauses: SqlFragment[] = [];
 
   if (filters.q && filters.q.trim().length > 0) {
     const likeValue = toLike(filters.q);
@@ -137,12 +143,25 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
   }
 
   pushLikeClause(clauses, Prisma.sql`n.cn`, filters.cn);
-  pushLikeClause(clauses, Prisma.sql`COALESCE(c.activeIngredient, '')`, filters.activeIngredient);
-  pushLikeClause(clauses, Prisma.sql`COALESCE(c.laboratory, '')`, filters.laboratory);
+  pushLikeClause(
+    clauses,
+    Prisma.sql`COALESCE(c.activeIngredient, '')`,
+    filters.activeIngredient,
+  );
+  pushLikeClause(
+    clauses,
+    Prisma.sql`COALESCE(c.laboratory, '')`,
+    filters.laboratory,
+  );
   pushLikeClause(clauses, Prisma.sql`COALESCE(c.atcCode, '')`, filters.atc);
 
-  if (filters.commercializationStatus && filters.commercializationStatus.trim().length > 0) {
-    clauses.push(Prisma.sql`n.commercializationStatus = ${filters.commercializationStatus}`);
+  if (
+    filters.commercializationStatus &&
+    filters.commercializationStatus.trim().length > 0
+  ) {
+    clauses.push(
+      Prisma.sql`n.commercializationStatus = ${filters.commercializationStatus}`,
+    );
   }
 
   if (filters.includedInHospital === 'SI') {
@@ -156,13 +175,19 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
   if (filters.includedInHospital === 'SI') {
     switch (filters.hospitalStatus) {
       case 'ACTIVO':
-        clauses.push(Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'activo'`);
+        clauses.push(
+          Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'activo'`,
+        );
         break;
       case 'INACTIVO':
-        clauses.push(Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'inactivo'`);
+        clauses.push(
+          Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'inactivo'`,
+        );
         break;
       case 'LAB':
-        clauses.push(Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'lab'`);
+        clauses.push(
+          Prisma.sql`LOWER(TRIM(COALESCE(w.statusOriginal, ''))) = 'lab'`,
+        );
         break;
       case 'OTROS':
         clauses.push(
@@ -177,7 +202,10 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
     }
   }
 
-  if (filters.bifimedFundingStatus && filters.bifimedFundingStatus.trim().length > 0) {
+  if (
+    filters.bifimedFundingStatus &&
+    filters.bifimedFundingStatus.trim().length > 0
+  ) {
     clauses.push(Prisma.sql`b.fundingStatus = ${filters.bifimedFundingStatus}`);
   }
 
@@ -188,7 +216,9 @@ function buildCatalogWhere(filters: CatalogFilters): Prisma.Sql {
   return Prisma.join(clauses, ' AND ');
 }
 
-export async function listCatalogByCn(filters: CatalogFilters): Promise<CatalogListResult> {
+export async function listCatalogByCn(
+  filters: CatalogFilters,
+): Promise<CatalogListResult> {
   const page = normalizePage(filters.page);
   const pageSize = normalizePageSize(filters.pageSize);
   const offset = (page - 1) * pageSize;
@@ -258,13 +288,23 @@ function normalizeIso(date: Date | null | undefined): string | null {
   return date.toISOString();
 }
 
-export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | null> {
+export async function getCatalogDetailByCn(
+  cn: string,
+): Promise<CatalogDetail | null> {
   const normalizedCn = cn.trim();
   if (!/^\d{6}$/.test(normalizedCn)) {
     return null;
   }
 
-  const [nomenclator, cima, watched, lastImport, bifimed, bifimedIndications, cimaCharacteristics] = await Promise.all([
+  const [
+    nomenclator,
+    cima,
+    watched,
+    lastImport,
+    bifimed,
+    bifimedIndications,
+    cimaCharacteristics,
+  ] = await Promise.all([
     prisma.nomenclatorProduct.findUnique({
       where: { cn: normalizedCn },
     }),
@@ -298,7 +338,8 @@ export async function getCatalogDetailByCn(cn: string): Promise<CatalogDetail | 
 
   return {
     cn: nomenclator.cn,
-    officialName: cima?.officialName ?? nomenclator.officialName ?? nomenclator.presentation,
+    officialName:
+      cima?.officialName ?? nomenclator.officialName ?? nomenclator.presentation,
     presentation: nomenclator.presentation,
     activeIngredient: cima?.activeIngredient ?? null,
     laboratory: cima?.laboratory ?? null,
