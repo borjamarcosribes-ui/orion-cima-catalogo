@@ -107,7 +107,10 @@ function parseJsonArray(value: string | null): unknown[] {
   }
 }
 
-function formatProcess(jobName: string): { key: AutomationProcessKey; label: string } {
+function formatProcess(jobName: string): {
+  key: AutomationProcessKey;
+  label: string;
+} {
   if (jobName === 'NOMENCLATOR_UPDATE') {
     return { key: 'NOMENCLATOR', label: 'Nomenclátor' };
   }
@@ -161,9 +164,14 @@ function formatStatus(status: string): string {
 }
 
 function summarizeNomenclator(summary: Record<string, unknown>): string {
-  const processed = typeof summary.processed === 'number' ? summary.processed : null;
-  const insertedOrUpdated = typeof summary.insertedOrUpdated === 'number' ? summary.insertedOrUpdated : null;
-  const discarded = typeof summary.discarded === 'number' ? summary.discarded : null;
+  const processed =
+    typeof summary.processed === 'number' ? summary.processed : null;
+  const insertedOrUpdated =
+    typeof summary.insertedOrUpdated === 'number'
+      ? summary.insertedOrUpdated
+      : null;
+  const discarded =
+    typeof summary.discarded === 'number' ? summary.discarded : null;
   const sourceMode = summary.sourceMode === 'zip_download' ? 'ZIP' : 'XML local';
 
   const parts = [
@@ -188,8 +196,13 @@ function summarizeSupplyMonitor(
     }
   >,
 ): string {
-  const supplyMonitorRunId = typeof summary.supplyMonitorRunId === 'string' ? summary.supplyMonitorRunId : null;
-  const enriched = supplyMonitorRunId ? supplyMonitorRunById.get(supplyMonitorRunId) : null;
+  const supplyMonitorRunId =
+    typeof summary.supplyMonitorRunId === 'string'
+      ? summary.supplyMonitorRunId
+      : null;
+  const enriched = supplyMonitorRunId
+    ? supplyMonitorRunById.get(supplyMonitorRunId)
+    : null;
 
   if (enriched) {
     return [
@@ -200,14 +213,18 @@ function summarizeSupplyMonitor(
     ].join(' · ');
   }
 
-  return supplyMonitorRunId ? `Run ${supplyMonitorRunId}` : 'Sin resumen disponible';
+  return supplyMonitorRunId
+    ? `Run ${supplyMonitorRunId}`
+    : 'Sin resumen disponible';
 }
 
 function summarizeCacheRefresh(summary: Record<string, unknown>): string {
   const scope = typeof summary.scope === 'string' ? summary.scope : null;
-  const totalTargets = typeof summary.totalTargets === 'number' ? summary.totalTargets : null;
+  const totalTargets =
+    typeof summary.totalTargets === 'number' ? summary.totalTargets : null;
   const updated = typeof summary.updated === 'number' ? summary.updated : null;
-  const notFound = typeof summary.notFound === 'number' ? summary.notFound : null;
+  const notFound =
+    typeof summary.notFound === 'number' ? summary.notFound : null;
   const failed = typeof summary.failed === 'number' ? summary.failed : null;
 
   const parts = [
@@ -223,13 +240,19 @@ function summarizeCacheRefresh(summary: Record<string, unknown>): string {
 
 function summarizeSupplyEmailDigest(summary: Record<string, unknown>): string {
   const subscriptionsProcessed =
-    typeof summary.subscriptionsProcessed === 'number' ? summary.subscriptionsProcessed : null;
-  const emailsSent = typeof summary.emailsSent === 'number' ? summary.emailsSent : null;
-  const totalEvents = typeof summary.totalEvents === 'number' ? summary.totalEvents : null;
+    typeof summary.subscriptionsProcessed === 'number'
+      ? summary.subscriptionsProcessed
+      : null;
+  const emailsSent =
+    typeof summary.emailsSent === 'number' ? summary.emailsSent : null;
+  const totalEvents =
+    typeof summary.totalEvents === 'number' ? summary.totalEvents : null;
   const failed = typeof summary.failed === 'number' ? summary.failed : null;
 
   const parts = [
-    subscriptionsProcessed !== null ? `${subscriptionsProcessed} suscripciones` : null,
+    subscriptionsProcessed !== null
+      ? `${subscriptionsProcessed} suscripciones`
+      : null,
     emailsSent !== null ? `${emailsSent} enviados` : null,
     totalEvents !== null ? `${totalEvents} eventos` : null,
     failed !== null ? `${failed} fallidos` : null,
@@ -270,7 +293,9 @@ function summarizeRun(
   return summarizeSupplyMonitor(summary, supplyMonitorRunById);
 }
 
-export async function getAutomationDashboardData(limit = 20): Promise<AutomationDashboardData> {
+export async function getAutomationDashboardData(
+  limit = 20,
+): Promise<AutomationDashboardData> {
   const now = new Date();
 
   const [
@@ -361,7 +386,9 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
   ]);
 
   const supplyMonitorRunIds = recentRuns
-    .map((run: { summaryJson: string | null }) => parseJsonObject(run.summaryJson).supplyMonitorRunId)
+    .map((run: { summaryJson: string | null }) =>
+      parseJsonObject(run.summaryJson).supplyMonitorRunId,
+    )
     .filter((value: unknown): value is string => typeof value === 'string');
 
   const supplyMonitorRuns = supplyMonitorRunIds.length
@@ -381,31 +408,32 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
       })
     : [];
 
-const supplyMonitorRunById = new Map(
-  supplyMonitorRuns.map(
-    (run: {
-      id: string;
-      checkedProducts: number;
-      changedProducts: number;
-      newIssues: number;
-      resolvedIssues: number;
-    }) => [
-      run.id,
-      {
-        checkedProducts: run.checkedProducts,
-        changedProducts: run.changedProducts,
-        newIssues: run.newIssues,
-        resolvedIssues: run.resolvedIssues,
-      },
-    ] as const,
-  ),
-);
+  const supplyMonitorRunById = new Map(
+    supplyMonitorRuns.map(
+      (run: {
+        id: string;
+        checkedProducts: number;
+        changedProducts: number;
+        newIssues: number;
+        resolvedIssues: number;
+      }) =>
+        [
+          run.id,
+          {
+            checkedProducts: run.checkedProducts,
+            changedProducts: run.changedProducts,
+            newIssues: run.newIssues,
+            resolvedIssues: run.resolvedIssues,
+          },
+        ] as const,
+    ),
+  );
 
-const activeLockByKey = new Map(
-  locks.map(
-    (lock: { key: string; expiresAt: Date }) => [lock.key, lock] as const,
-  ),
-);
+  const activeLockByKey = new Map<string, { key: string; expiresAt: Date }>(
+    locks.map(
+      (lock: { key: string; expiresAt: Date }) => [lock.key, lock] as const,
+    ),
+  );
 
   return {
     summaryCards: [
@@ -413,7 +441,9 @@ const activeLockByKey = new Map(
         processKey: 'NOMENCLATOR',
         processLabel: 'Nomenclátor',
         lastRunAt: latestNomenclatorRun
-          ? (latestNomenclatorRun.finishedAt ?? latestNomenclatorRun.startedAt).toISOString()
+          ? (
+              latestNomenclatorRun.finishedAt ?? latestNomenclatorRun.startedAt
+            ).toISOString()
           : null,
         status: latestNomenclatorRun?.status ?? null,
       },
@@ -421,7 +451,10 @@ const activeLockByKey = new Map(
         processKey: 'SUPPLY_MONITOR',
         processLabel: 'Monitor AEMPS / CIMA',
         lastRunAt: latestSupplyMonitorRun
-          ? (latestSupplyMonitorRun.finishedAt ?? latestSupplyMonitorRun.startedAt).toISOString()
+          ? (
+              latestSupplyMonitorRun.finishedAt ??
+              latestSupplyMonitorRun.startedAt
+            ).toISOString()
           : null,
         status: latestSupplyMonitorRun?.status ?? null,
       },
@@ -429,7 +462,9 @@ const activeLockByKey = new Map(
         processKey: 'CIMA_WATCHED',
         processLabel: 'Caché CIMA (watched)',
         lastRunAt: latestCimaWatchedRun
-          ? (latestCimaWatchedRun.finishedAt ?? latestCimaWatchedRun.startedAt).toISOString()
+          ? (
+              latestCimaWatchedRun.finishedAt ?? latestCimaWatchedRun.startedAt
+            ).toISOString()
           : null,
         status: latestCimaWatchedRun?.status ?? null,
       },
@@ -437,7 +472,9 @@ const activeLockByKey = new Map(
         processKey: 'CIMA_ALL',
         processLabel: 'Caché CIMA (all)',
         lastRunAt: latestCimaAllRun
-          ? (latestCimaAllRun.finishedAt ?? latestCimaAllRun.startedAt).toISOString()
+          ? (
+              latestCimaAllRun.finishedAt ?? latestCimaAllRun.startedAt
+            ).toISOString()
           : null,
         status: latestCimaAllRun?.status ?? null,
       },
@@ -445,7 +482,9 @@ const activeLockByKey = new Map(
         processKey: 'BIFIMED_ALL',
         processLabel: 'Caché BIFIMED (all)',
         lastRunAt: latestBifimedAllRun
-          ? (latestBifimedAllRun.finishedAt ?? latestBifimedAllRun.startedAt).toISOString()
+          ? (
+              latestBifimedAllRun.finishedAt ?? latestBifimedAllRun.startedAt
+            ).toISOString()
           : null,
         status: latestBifimedAllRun?.status ?? null,
       },
@@ -453,7 +492,10 @@ const activeLockByKey = new Map(
         processKey: 'SUPPLY_EMAIL_DIGEST',
         processLabel: 'Digest diario por email',
         lastRunAt: latestSupplyEmailDigestRun
-          ? (latestSupplyEmailDigestRun.finishedAt ?? latestSupplyEmailDigestRun.startedAt).toISOString()
+          ? (
+              latestSupplyEmailDigestRun.finishedAt ??
+              latestSupplyEmailDigestRun.startedAt
+            ).toISOString()
           : null,
         status: latestSupplyEmailDigestRun?.status ?? null,
       },
@@ -465,63 +507,104 @@ const activeLockByKey = new Map(
       { key: 'cima_cache_refresh_all', label: 'Caché CIMA (all)' },
       { key: 'bifimed_cache_refresh_all', label: 'Caché BIFIMED (all)' },
       { key: 'supply_daily_email_digest', label: 'Digest diario por email' },
-    ].map((item) => {
-      const lock = activeLockByKey.get(item.key);
+    ].map((item: { key: string; label: string }) => {
+      const lock = activeLockByKey.get(item.key) ?? null;
 
       return {
         key: item.key,
         label: item.label,
         status: lock ? 'active' : 'free',
-        expiresAt: lock?.expiresAt.toISOString() ?? null,
+        expiresAt: lock ? lock.expiresAt.toISOString() : null,
       };
     }),
-    notificationSubscriptions: notificationSubscriptions.map((item) => ({
-      id: item.id,
-      email: item.email,
-      enabled: item.enabled,
-      endDate: item.endDate?.toISOString() ?? null,
-      lastSentAt: item.lastSentAt?.toISOString() ?? null,
-      createdAt: item.createdAt.toISOString(),
-      updatedAt: item.updatedAt.toISOString(),
-    })),
-    notificationRuns: notificationRuns.map((item) => ({
-      id: item.id,
-      subscriptionId: item.subscriptionId,
-      email: item.subscription.email,
-      windowStart: item.windowStart.toISOString(),
-      windowEnd: item.windowEnd.toISOString(),
-      status: item.status,
-      eventsCount: item.eventsCount,
-      sentAt: item.sentAt?.toISOString() ?? null,
-      errorMessage: item.errorMessage ?? null,
-      summary: parseJsonObject(item.summaryJson),
-    })),
-    recentRuns: recentRuns.map((run) => {
-      const process = formatProcess(run.jobName);
-      const summary = parseJsonObject(run.summaryJson);
-      const errors = parseJsonArray(run.errorsJson);
-      const sortDate = (run.finishedAt ?? run.startedAt).toISOString();
+    notificationSubscriptions: notificationSubscriptions.map(
+      (item: {
+        id: string;
+        email: string;
+        enabled: boolean;
+        endDate: Date | null;
+        lastSentAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }) => ({
+        id: item.id,
+        email: item.email,
+        enabled: item.enabled,
+        endDate: item.endDate?.toISOString() ?? null,
+        lastSentAt: item.lastSentAt?.toISOString() ?? null,
+        createdAt: item.createdAt.toISOString(),
+        updatedAt: item.updatedAt.toISOString(),
+      }),
+    ),
+    notificationRuns: notificationRuns.map(
+      (item: {
+        id: string;
+        subscriptionId: string;
+        subscription: { email: string };
+        windowStart: Date;
+        windowEnd: Date;
+        status: string;
+        eventsCount: number;
+        sentAt: Date | null;
+        errorMessage: string | null;
+        summaryJson: string | null;
+      }) => ({
+        id: item.id,
+        subscriptionId: item.subscriptionId,
+        email: item.subscription.email,
+        windowStart: item.windowStart.toISOString(),
+        windowEnd: item.windowEnd.toISOString(),
+        status: item.status,
+        eventsCount: item.eventsCount,
+        sentAt: item.sentAt?.toISOString() ?? null,
+        errorMessage: item.errorMessage ?? null,
+        summary: parseJsonObject(item.summaryJson),
+      }),
+    ),
+    recentRuns: recentRuns.map(
+      (run: {
+        id: string;
+        jobName: string;
+        lockKey: string | null;
+        requestedAt: Date;
+        requestedBy: string | null;
+        startedAt: Date;
+        finishedAt: Date | null;
+        triggerType: string;
+        status: string;
+        summaryJson: string | null;
+        errorsJson: string | null;
+      }) => {
+        const process = formatProcess(run.jobName);
+        const summary = parseJsonObject(run.summaryJson);
+        const errors = parseJsonArray(run.errorsJson);
+        const sortDate = (run.finishedAt ?? run.startedAt).toISOString();
 
-      return {
-        processKey: process.key,
-        displayProcess: process.label,
-        displayOrigin: formatOrigin(run.triggerType),
-        displayStatus: formatStatus(run.status),
-        status: run.status,
-        sortDate,
-        shortSummary: summarizeRun(run.jobName, summary, supplyMonitorRunById),
-        detail: {
-          runId: run.id,
-          lockKey: run.lockKey ?? null,
-          requestedAt: run.requestedAt.toISOString(),
-          requestedBy: run.requestedBy ?? null,
-          startedAt: run.startedAt.toISOString(),
-          finishedAt: run.finishedAt?.toISOString() ?? null,
-          triggerType: run.triggerType,
-          summary,
-          errors,
-        },
-      };
-    }),
+        return {
+          processKey: process.key,
+          displayProcess: process.label,
+          displayOrigin: formatOrigin(run.triggerType),
+          displayStatus: formatStatus(run.status),
+          status: run.status,
+          sortDate,
+          shortSummary: summarizeRun(
+            run.jobName,
+            summary,
+            supplyMonitorRunById,
+          ),
+          detail: {
+            runId: run.id,
+            lockKey: run.lockKey ?? null,
+            requestedAt: run.requestedAt.toISOString(),
+            requestedBy: run.requestedBy ?? null,
+            startedAt: run.startedAt.toISOString(),
+            finishedAt: run.finishedAt?.toISOString() ?? null,
+            triggerType: run.triggerType,
+            summary,
+            errors,
+          },
+        };
+      },
+    ),
   };
 }
