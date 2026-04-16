@@ -614,7 +614,7 @@ async function resolveTargetCns(scope: RefreshScope, limit: number, offset: numb
       OFFSET ${offset}
     `;
 
-    return rows.map((row) => row.cn);
+    return rows.map((row: { cn: string }) => row.cn);
   }
 
   const rows = await prisma.$queryRaw<Array<{ cn: string }>>`
