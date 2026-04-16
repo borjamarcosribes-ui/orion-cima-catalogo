@@ -80,6 +80,19 @@ type RecentEventRow = {
   };
 };
 
+type ActiveSupplyIssueSourceRow = {
+  cn: string;
+  issueType: string | null;
+  startedAt: Date | null;
+  expectedEndAt: Date | null;
+  observations: string | null;
+  watchedMedicine: {
+    articleCode: string;
+    shortDescription: string;
+    statusNormalized: string | null;
+  };
+};
+
 function toIsoOrNull(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
 }
@@ -305,7 +318,7 @@ export async function executeSupplyMonitor(options?: {
 
 export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
   try {
-    const rows = await prisma.supplyStatus.findMany({
+    const rows = (await prisma.supplyStatus.findMany({
       where: {
         hasActiveSupplyIssue: true,
         watchedMedicine: {
@@ -328,11 +341,11 @@ export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
           },
         },
       },
-    });
+    })) as ActiveSupplyIssueSourceRow[];
 
     return rows
       .map(
-        (row): ActiveSupplyIssue => ({
+        (row: ActiveSupplyIssueSourceRow): ActiveSupplyIssue => ({
           cn: row.cn,
           articleCode: row.watchedMedicine.articleCode,
           shortDescription: row.watchedMedicine.shortDescription,
@@ -418,6 +431,8 @@ export async function getSupplyMonitorOverview(): Promise<SupplyMonitorOverview>
         }),
       ]);
 
+    const recentEventRows = recentEvents as RecentEventRow[];
+
     return {
       watchedProducts,
       activeIssues,
@@ -436,14 +451,16 @@ export async function getSupplyMonitorOverview(): Promise<SupplyMonitorOverview>
             resolvedIssues: latestRun.resolvedIssues,
           }
         : null,
-      recentEvents: recentEvents.map((event: RecentEventRow) => ({
-        id: event.id,
-        cn: event.cn,
-        articleCode: event.watchedMedicine.articleCode,
-        shortDescription: event.watchedMedicine.shortDescription,
-        eventType: event.eventType as SupplyEventType,
-        createdAt: event.createdAt.toISOString(),
-      })),
+      recentEvents: recentEventRows.map(
+        (event: RecentEventRow) => ({
+          id: event.id,
+          cn: event.cn,
+          articleCode: event.watchedMedicine.articleCode,
+          shortDescription: event.watchedMedicine.shortDescription,
+          eventType: event.eventType as SupplyEventType,
+          createdAt: event.createdAt.toISOString(),
+        }),
+      ),
     };
   } catch (error) {
     console.error('No se pudo cargar el panel de suministro.', error);
