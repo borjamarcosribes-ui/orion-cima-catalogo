@@ -619,7 +619,7 @@ async function resolveTargetCns(limit: number, offset: number): Promise<string[]
     OFFSET ${offset}
   `;
 
-  return rows.map((row) => row.cn);
+  return rows.map((row: { cn: string }) => row.cn);
 }
 
 async function executeBifimedCacheRefresh(input: {
