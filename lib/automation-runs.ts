@@ -361,7 +361,7 @@ export async function getAutomationDashboardData(limit = 20): Promise<Automation
   ]);
 
   const supplyMonitorRunIds = recentRuns
-    .map((run) => parseJsonObject(run.summaryJson).supplyMonitorRunId)
+    .map((run: { summaryJson: string | null }) => parseJsonObject(run.summaryJson).supplyMonitorRunId)
     .filter((value): value is string => typeof value === 'string');
 
   const supplyMonitorRuns = supplyMonitorRunIds.length
