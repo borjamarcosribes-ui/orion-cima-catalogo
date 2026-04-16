@@ -188,12 +188,12 @@ export default async function DashboardPage() {
   const resolvedIssues7d = recentEvents.filter((event: { eventType: string }) => event.eventType === 'RESOLVED').length;
 
   const enrichedActiveShortages: EnrichedActiveShortageRow[] = activeShortages
-    .map((item) => ({
-      cn: item.cn,
-      displayName: item.displayName,
-      hospitalStatusOriginal: item.hospitalStatusOriginal,
-      daysInIssue: calculateDaysInIssue(item.startedAt, now),
-    }))
+  .map((item: ActiveShortageRow) => ({
+    cn: item.cn,
+    displayName: item.displayName,
+    hospitalStatusOriginal: item.hospitalStatusOriginal,
+    daysInIssue: calculateDaysInIssue(item.startedAt, now),
+  }))
     .sort((a, b) => b.daysInIssue - a.daysInIssue || a.cn.localeCompare(b.cn));
 
   const averageAge =
