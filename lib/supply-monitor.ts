@@ -1,5 +1,10 @@
+import { Prisma } from '@prisma/client';
+
 import { prisma } from '@/lib/prisma';
-import { fetchSupplyStatusByCn, type NormalizedSupplyStatus } from '@/lib/cima-supply';
+import {
+  fetchSupplyStatusByCn,
+  type NormalizedSupplyStatus,
+} from '@/lib/cima-supply';
 
 export type SupplyEventType = 'NEW_ISSUE' | 'RESOLVED' | 'CHANGED';
 
@@ -64,6 +69,17 @@ type MonitorCheckResult = {
   eventType: SupplyEventType | null;
 };
 
+type RecentEventRow = {
+  id: string;
+  cn: string;
+  eventType: string;
+  createdAt: Date;
+  watchedMedicine: {
+    articleCode: string;
+    shortDescription: string;
+  };
+};
+
 function toIsoOrNull(value: Date | null | undefined): string | null {
   return value ? value.toISOString() : null;
 }
@@ -104,15 +120,24 @@ function detectEventType(
     return currentState.hasActiveSupplyIssue ? 'NEW_ISSUE' : null;
   }
 
-  if (!previousState.hasActiveSupplyIssue && currentState.hasActiveSupplyIssue) {
+  if (
+    !previousState.hasActiveSupplyIssue &&
+    currentState.hasActiveSupplyIssue
+  ) {
     return 'NEW_ISSUE';
   }
 
-  if (previousState.hasActiveSupplyIssue && !currentState.hasActiveSupplyIssue) {
+  if (
+    previousState.hasActiveSupplyIssue &&
+    !currentState.hasActiveSupplyIssue
+  ) {
     return 'RESOLVED';
   }
 
-  if (!previousState.hasActiveSupplyIssue && !currentState.hasActiveSupplyIssue) {
+  if (
+    !previousState.hasActiveSupplyIssue &&
+    !currentState.hasActiveSupplyIssue
+  ) {
     return null;
   }
 
@@ -129,7 +154,9 @@ function parseDate(value: string | null): Date | null {
   return value ? new Date(value) : null;
 }
 
-export async function executeSupplyMonitor(options?: { source?: 'manual' | 'scheduled' }) {
+export async function executeSupplyMonitor(options?: {
+  source?: 'manual' | 'scheduled';
+}) {
   const run = await prisma.supplyMonitorRun.create({
     data: {
       status: 'running',
@@ -145,12 +172,15 @@ export async function executeSupplyMonitor(options?: { source?: 'manual' | 'sche
     });
 
     const results: MonitorCheckResult[] = [];
-    const errors: Array<{ cn: string; articleCode: string; message: string }> = [];
+    const errors: Array<{ cn: string; articleCode: string; message: string }> =
+      [];
 
     for (const watchedMedicine of watchedMedicines) {
       try {
         const currentState = await fetchSupplyStatusByCn(watchedMedicine.cn);
-        const previousState = normalizePreviousState(watchedMedicine.supplyStatus);
+        const previousState = normalizePreviousState(
+          watchedMedicine.supplyStatus,
+        );
         const eventType = detectEventType(previousState, currentState);
 
         results.push({
@@ -168,19 +198,30 @@ export async function executeSupplyMonitor(options?: { source?: 'manual' | 'sche
         errors.push({
           cn: watchedMedicine.cn,
           articleCode: watchedMedicine.articleCode,
-          message: error instanceof Error ? error.message : 'Error desconocido al consultar CIMA.',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Error desconocido al consultar CIMA.',
         });
       }
     }
 
-    const newIssues = results.filter((result) => result.eventType === 'NEW_ISSUE').length;
-    const resolvedIssues = results.filter((result) => result.eventType === 'RESOLVED').length;
-    const changedIssues = results.filter((result) => result.eventType === 'CHANGED').length;
+    const newIssues = results.filter(
+      (result: MonitorCheckResult) => result.eventType === 'NEW_ISSUE',
+    ).length;
+    const resolvedIssues = results.filter(
+      (result: MonitorCheckResult) => result.eventType === 'RESOLVED',
+    ).length;
+    const changedIssues = results.filter(
+      (result: MonitorCheckResult) => result.eventType === 'CHANGED',
+    ).length;
     const activeIssues = results.filter(
-      (result) => result.currentState.foundInCima && result.currentState.hasActiveSupplyIssue,
+      (result: MonitorCheckResult) =>
+        result.currentState.foundInCima &&
+        result.currentState.hasActiveSupplyIssue,
     ).length;
 
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       for (const result of results) {
         await tx.supplyStatus.upsert({
           where: { watchedMedicineId: result.watchedMedicine.id },
@@ -216,7 +257,9 @@ export async function executeSupplyMonitor(options?: { source?: 'manual' | 'sche
               watchedMedicineId: result.watchedMedicine.id,
               cn: result.watchedMedicine.cn,
               eventType: result.eventType,
-              previousStateJson: result.previousState ? JSON.stringify(result.previousState) : null,
+              previousStateJson: result.previousState
+                ? JSON.stringify(result.previousState)
+                : null,
               currentStateJson: JSON.stringify(result.currentState),
             },
           });
@@ -247,7 +290,10 @@ export async function executeSupplyMonitor(options?: { source?: 'manual' | 'sche
         status: 'failed',
         errorsJson: JSON.stringify([
           {
-            message: error instanceof Error ? error.message : 'Error desconocido en la ejecución del monitor.',
+            message:
+              error instanceof Error
+                ? error.message
+                : 'Error desconocido en la ejecución del monitor.',
           },
         ]),
       },
@@ -290,14 +336,15 @@ export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
           cn: row.cn,
           articleCode: row.watchedMedicine.articleCode,
           shortDescription: row.watchedMedicine.shortDescription,
-          status: row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
+          status:
+            row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
           issueType: row.issueType,
           startedAt: row.startedAt?.toISOString() ?? null,
           expectedEndAt: row.expectedEndAt?.toISOString() ?? null,
           observations: row.observations,
         }),
       )
-      .sort((left, right) => {
+      .sort((left: ActiveSupplyIssue, right: ActiveSupplyIssue) => {
         if (left.startedAt && right.startedAt) {
           const byStartedAt = right.startedAt.localeCompare(left.startedAt);
           if (byStartedAt !== 0) {
@@ -319,56 +366,57 @@ export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
 
 export async function getSupplyMonitorOverview(): Promise<SupplyMonitorOverview> {
   try {
-    const [watchedProducts, activeIssues, latestRun, recentEvents] = await Promise.all([
-      prisma.watchedMedicine.count({ where: { isWatched: true } }),
-      prisma.supplyStatus.count({
-        where: {
-          hasActiveSupplyIssue: true,
-          watchedMedicine: {
-            is: {
-              isWatched: true,
+    const [watchedProducts, activeIssues, latestRun, recentEvents] =
+      await Promise.all([
+        prisma.watchedMedicine.count({ where: { isWatched: true } }),
+        prisma.supplyStatus.count({
+          where: {
+            hasActiveSupplyIssue: true,
+            watchedMedicine: {
+              is: {
+                isWatched: true,
+              },
             },
           },
-        },
-      }),
-      prisma.supplyMonitorRun.findFirst({
-        orderBy: { startedAt: 'desc' },
-        select: {
-          id: true,
-          startedAt: true,
-          finishedAt: true,
-          status: true,
-          checkedProducts: true,
-          changedProducts: true,
-          activeIssues: true,
-          newIssues: true,
-          resolvedIssues: true,
-        },
-      }),
-      prisma.supplyMonitoringEvent.findMany({
-        where: {
-          watchedMedicine: {
-            is: {
-              isWatched: true,
+        }),
+        prisma.supplyMonitorRun.findFirst({
+          orderBy: { startedAt: 'desc' },
+          select: {
+            id: true,
+            startedAt: true,
+            finishedAt: true,
+            status: true,
+            checkedProducts: true,
+            changedProducts: true,
+            activeIssues: true,
+            newIssues: true,
+            resolvedIssues: true,
+          },
+        }),
+        prisma.supplyMonitoringEvent.findMany({
+          where: {
+            watchedMedicine: {
+              is: {
+                isWatched: true,
+              },
             },
           },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 20,
-        select: {
-          id: true,
-          cn: true,
-          eventType: true,
-          createdAt: true,
-          watchedMedicine: {
-            select: {
-              articleCode: true,
-              shortDescription: true,
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: {
+            id: true,
+            cn: true,
+            eventType: true,
+            createdAt: true,
+            watchedMedicine: {
+              select: {
+                articleCode: true,
+                shortDescription: true,
+              },
             },
           },
-        },
-      }),
-    ]);
+        }),
+      ]);
 
     return {
       watchedProducts,
@@ -388,7 +436,7 @@ export async function getSupplyMonitorOverview(): Promise<SupplyMonitorOverview>
             resolvedIssues: latestRun.resolvedIssues,
           }
         : null,
-      recentEvents: recentEvents.map((event) => ({
+      recentEvents: recentEvents.map((event: RecentEventRow) => ({
         id: event.id,
         cn: event.cn,
         articleCode: event.watchedMedicine.articleCode,
