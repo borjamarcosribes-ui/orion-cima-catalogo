@@ -200,6 +200,7 @@ function summarizeSupplyMonitor(
     typeof summary.supplyMonitorRunId === 'string'
       ? summary.supplyMonitorRunId
       : null;
+
   const enriched = supplyMonitorRunId
     ? supplyMonitorRunById.get(supplyMonitorRunId)
     : null;
@@ -408,7 +409,15 @@ export async function getAutomationDashboardData(
       })
     : [];
 
-  const supplyMonitorRunById = new Map(
+  const supplyMonitorRunById = new Map<
+    string,
+    {
+      checkedProducts: number;
+      changedProducts: number;
+      newIssues: number;
+      resolvedIssues: number;
+    }
+  >(
     supplyMonitorRuns.map(
       (run: {
         id: string;
