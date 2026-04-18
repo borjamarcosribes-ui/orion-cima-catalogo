@@ -6,7 +6,10 @@ import type { ScheduledJobExecutionResult } from '@/lib/scheduled-jobs';
 
 const require = createRequire(import.meta.url);
 const { importNomenclatorFromFile } = require('./nomenclator-import.cjs') as {
-  importNomenclatorFromFile: (inputPath: string, options?: { cwd?: string }) => Promise<Record<string, unknown>>;
+  importNomenclatorFromFile: (
+    inputPath: string,
+    options?: { cwd?: string; prisma?: typeof prisma },
+  ) => Promise<Record<string, unknown>>;
 };
 
 type NomenclatorUpdateSummary = {
@@ -66,7 +69,11 @@ export async function executeNomenclatorUpdate(): Promise<ScheduledJobExecutionR
   const preparedSource = await prepareNomenclatorSource();
 
   try {
-    const rawSummary = await importNomenclatorFromFile(preparedSource.xmlPath, { cwd: process.cwd() });
+    const rawSummary = await importNomenclatorFromFile(preparedSource.xmlPath, {
+      cwd: process.cwd(),
+      prisma,
+    });
+
     const baseSummary = normalizeNomenclatorSummary(rawSummary);
 
     return {
