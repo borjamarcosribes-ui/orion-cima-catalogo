@@ -1,70 +1,100 @@
 'use client';
 
-import type { FormEvent } from 'react';
-import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { FormEvent, useMemo, useState, useTransition } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
-export function LoginForm() {
-  const router = useRouter();
+type LoginFormProps = {
+  callbackUrl?: string;
+};
+
+export default function LoginForm({ callbackUrl }: LoginFormProps) {
   const searchParams = useSearchParams();
-
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isPending, setIsPending] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const resolvedCallbackUrl = useMemo(() => {
+    return callbackUrl ?? searchParams.get('callbackUrl') ?? '/';
+  }, [callbackUrl, searchParams]);
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    setIsPending(true);
 
-    try {
-      const formData = new FormData(event.currentTarget);
-      const email = String(formData.get('email') ?? '')
-        .trim()
-        .toLowerCase();
-      const password = String(formData.get('password') ?? '');
-      const callbackUrl = searchParams.get('from') || '/';
+    startTransition(async () => {
+      try {
+        const result = await signIn('credentials', {
+          username,
+          password,
+          redirect: false,
+          callbackUrl: resolvedCallbackUrl,
+        });
 
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-        callbackUrl,
-      });
+        if (!result) {
+          setError('No se pudo iniciar sesión.');
+          return;
+        }
 
-      if (!result || result.error) {
-        setError('Credenciales inválidas o usuario inactivo.');
-        return;
+        if (result.error) {
+          setError('Usuario o contraseña incorrectos.');
+          return;
+        }
+
+        const targetUrl = result.url || resolvedCallbackUrl;
+        window.location.href = targetUrl;
+      } catch {
+        setError('No se pudo iniciar sesión.');
       }
-
-      router.push(result.url || callbackUrl);
-      router.refresh();
-    } catch {
-      setError('No se pudo iniciar sesión.');
-    } finally {
-      setIsPending(false);
-    }
+    });
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid" style={{ gap: 12 }}>
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <small className="muted">Email</small>
-        <input name="email" type="email" required />
-      </label>
+    <div className="card">
+      <form onSubmit={handleSubmit}>
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          <div style={{ display: 'grid', gap: '0.35rem' }}>
+            <label htmlFor="username">Usuario</label>
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              disabled={isPending}
+              required
+            />
+          </div>
 
-      <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <small className="muted">Contraseña</small>
-        <input name="password" type="password" required />
-      </label>
+          <div style={{ display: 'grid', gap: '0.35rem' }}>
+            <label htmlFor="password">Contraseña</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              disabled={isPending}
+              required
+            />
+          </div>
 
-      {error ? <div className="badge danger">{error}</div> : null}
+          {error ? (
+            <p style={{ margin: 0 }}>
+              {error}
+            </p>
+          ) : null}
 
-      <div className="actions-row" style={{ marginTop: 4 }}>
-        <button className="primary-button" type="submit" disabled={isPending}>
-          {isPending ? 'Entrando…' : 'Entrar'}
-        </button>
-      </div>
-    </form>
+          <div className="actions-row">
+            <button type="submit" className="primary-button" disabled={isPending}>
+              {isPending ? 'Entrando...' : 'Entrar'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
