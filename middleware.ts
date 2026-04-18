@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { getToken } from 'next-auth/jwt';
 
 const PUBLIC_PATHS = ['/login'];
 
@@ -7,27 +8,23 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
-function hasSessionCookie(request: NextRequest): boolean {
-  return Boolean(
-    request.cookies.get('__Secure-authjs.session-token')?.value ||
-      request.cookies.get('authjs.session-token')?.value ||
-      request.cookies.get('__Secure-next-auth.session-token')?.value ||
-      request.cookies.get('next-auth.session-token')?.value,
-  );
-}
-
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET,
+  });
+
   if (isPublicPath(pathname)) {
-    if (hasSessionCookie(request)) {
+    if (token) {
       return NextResponse.redirect(new URL('/', request.url));
     }
 
     return NextResponse.next();
   }
 
-  if (hasSessionCookie(request)) {
+  if (token) {
     return NextResponse.next();
   }
 

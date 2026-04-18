@@ -10,7 +10,7 @@ type LoginFormProps = {
 
 export default function LoginForm({ callbackUrl }: LoginFormProps) {
   const searchParams = useSearchParams();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -26,7 +26,7 @@ export default function LoginForm({ callbackUrl }: LoginFormProps) {
     startTransition(async () => {
       try {
         const result = await signIn('credentials', {
-          username,
+          email,
           password,
           redirect: false,
           callbackUrl: resolvedCallbackUrl,
@@ -55,14 +55,14 @@ export default function LoginForm({ callbackUrl }: LoginFormProps) {
       <form onSubmit={handleSubmit}>
         <div style={{ display: 'grid', gap: '1rem' }}>
           <div style={{ display: 'grid', gap: '0.35rem' }}>
-            <label htmlFor="username">Usuario</label>
+            <label htmlFor="email">Email</label>
             <input
-              id="username"
-              name="username"
-              type="text"
-              autoComplete="username"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
               disabled={isPending}
               required
             />
@@ -82,11 +82,7 @@ export default function LoginForm({ callbackUrl }: LoginFormProps) {
             />
           </div>
 
-          {error ? (
-            <p style={{ margin: 0 }}>
-              {error}
-            </p>
-          ) : null}
+          {error ? <p style={{ margin: 0 }}>{error}</p> : null}
 
           <div className="actions-row">
             <button type="submit" className="primary-button" disabled={isPending}>

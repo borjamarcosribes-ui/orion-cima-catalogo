@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 type AppRole = 'ADMIN' | 'LECTURA';
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET,
   session: {
     strategy: 'jwt',
   },
@@ -26,6 +27,7 @@ export const authOptions: NextAuthOptions = {
           typeof credentials?.email === 'string'
             ? credentials.email.trim().toLowerCase()
             : '';
+
         const password =
           typeof credentials?.password === 'string'
             ? credentials.password
@@ -52,6 +54,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
+
         if (!isValid) {
           return null;
         }
@@ -76,9 +79,8 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        (
-          session.user as typeof session.user & { role?: AppRole }
-        ).role = ((token as { role?: AppRole }).role ?? 'LECTURA') as AppRole;
+        (session.user as typeof session.user & { role?: AppRole }).role =
+          ((token as { role?: AppRole }).role ?? 'LECTURA') as AppRole;
       }
 
       return session;
