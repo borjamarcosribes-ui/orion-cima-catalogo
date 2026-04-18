@@ -100,55 +100,90 @@ export default async function DashboardPage() {
   const [counts, activeIssues, activeShortages, recentEvents] = await Promise.all([
     prisma.$queryRaw<CountRow[]>`
       SELECT
-        COUNT(*) AS totalIncluded,
-        SUM(CASE WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) = 'ACTIVO' THEN 1 ELSE 0 END) AS totalActive,
-        SUM(CASE WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) = 'LAB' THEN 1 ELSE 0 END) AS totalLab,
-        SUM(CASE WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) = 'INACTIVO' THEN 1 ELSE 0 END) AS totalInactive,
+        COUNT(*) AS "totalIncluded",
         SUM(
           CASE
-            WHEN UPPER(TRIM(COALESCE(statusNormalized, ''))) NOT IN ('ACTIVO', 'LAB', 'INACTIVO')
+            WHEN UPPER(TRIM(COALESCE(w."statusNormalized", ''))) = 'ACTIVO'
             THEN 1
             ELSE 0
           END
-        ) AS totalOther
-      FROM watched_medicines
-      WHERE cn IS NOT NULL AND LENGTH(TRIM(cn)) = 6
+        ) AS "totalActive",
+        SUM(
+          CASE
+            WHEN UPPER(TRIM(COALESCE(w."statusNormalized", ''))) = 'LAB'
+            THEN 1
+            ELSE 0
+          END
+        ) AS "totalLab",
+        SUM(
+          CASE
+            WHEN UPPER(TRIM(COALESCE(w."statusNormalized", ''))) = 'INACTIVO'
+            THEN 1
+            ELSE 0
+          END
+        ) AS "totalInactive",
+        SUM(
+          CASE
+            WHEN UPPER(TRIM(COALESCE(w."statusNormalized", ''))) NOT IN ('ACTIVO', 'LAB', 'INACTIVO')
+            THEN 1
+            ELSE 0
+          END
+        ) AS "totalOther"
+      FROM watched_medicines w
+      WHERE w.cn IS NOT NULL
+        AND LENGTH(TRIM(w.cn)) = 6
     `,
     prisma.$queryRaw<ActiveIssueRow[]>`
       SELECT
-        SUM(CASE WHEN s.hasActiveSupplyIssue = 1 THEN 1 ELSE 0 END) AS totalActiveShortages,
         SUM(
           CASE
-            WHEN s.hasActiveSupplyIssue = 1
-             AND UPPER(TRIM(COALESCE(w.statusNormalized, ''))) = 'ACTIVO'
+            WHEN s."hasActiveSupplyIssue" = TRUE
             THEN 1
             ELSE 0
           END
-        ) AS activeStatusShortages,
+        ) AS "totalActiveShortages",
         SUM(
           CASE
-            WHEN s.hasActiveSupplyIssue = 1
-             AND UPPER(TRIM(COALESCE(w.statusNormalized, ''))) = 'LAB'
+            WHEN s."hasActiveSupplyIssue" = TRUE
+             AND UPPER(TRIM(COALESCE(w."statusNormalized", ''))) = 'ACTIVO'
             THEN 1
             ELSE 0
           END
-        ) AS labStatusShortages
+        ) AS "activeStatusShortages",
+        SUM(
+          CASE
+            WHEN s."hasActiveSupplyIssue" = TRUE
+             AND UPPER(TRIM(COALESCE(w."statusNormalized", ''))) = 'LAB'
+            THEN 1
+            ELSE 0
+          END
+        ) AS "labStatusShortages"
       FROM watched_medicines w
-      LEFT JOIN supply_statuses s ON s.watchedMedicineId = w.id
-      WHERE w.cn IS NOT NULL AND LENGTH(TRIM(w.cn)) = 6
+      LEFT JOIN supply_statuses s
+        ON s."watchedMedicineId" = w.id
+      WHERE w.cn IS NOT NULL
+        AND LENGTH(TRIM(w.cn)) = 6
     `,
     prisma.$queryRaw<ActiveShortageRow[]>`
       SELECT
         w.cn AS cn,
-        COALESCE(c.officialName, n.officialName, n.presentation, w.shortDescription) AS displayName,
-        w.statusOriginal AS hospitalStatusOriginal,
-        s.startedAt AS startedAt
+        COALESCE(
+          c."officialName",
+          n."officialName",
+          n.presentation,
+          w."shortDescription"
+        ) AS "displayName",
+        w."statusOriginal" AS "hospitalStatusOriginal",
+        s."startedAt" AS "startedAt"
       FROM supply_statuses s
-      INNER JOIN watched_medicines w ON w.id = s.watchedMedicineId
-      LEFT JOIN nomenclator_products n ON n.cn = w.cn
-      LEFT JOIN cima_cache c ON c.nationalCode = w.cn
-      WHERE s.hasActiveSupplyIssue = 1
-        AND s.startedAt IS NOT NULL
+      INNER JOIN watched_medicines w
+        ON w.id = s."watchedMedicineId"
+      LEFT JOIN nomenclator_products n
+        ON n.cn = w.cn
+      LEFT JOIN cima_cache c
+        ON c."nationalCode" = w.cn
+      WHERE s."hasActiveSupplyIssue" = TRUE
+        AND s."startedAt" IS NOT NULL
         AND w.cn IS NOT NULL
         AND LENGTH(TRIM(w.cn)) = 6
     `,
@@ -184,33 +219,34 @@ export default async function DashboardPage() {
   const activeStatusShortages = toNumber(activeIssueRow?.activeStatusShortages);
   const labStatusShortages = toNumber(activeIssueRow?.labStatusShortages);
 
-const newIssues7d = recentEvents.filter(
-  (event: { eventType: string }) => event.eventType === 'NEW_ISSUE',
-).length;
+  const newIssues7d = recentEvents.filter(
+    (event: { eventType: string }) => event.eventType === 'NEW_ISSUE',
+  ).length;
 
-const resolvedIssues7d = recentEvents.filter(
-  (event: { eventType: string }) => event.eventType === 'RESOLVED',
-).length;
+  const resolvedIssues7d = recentEvents.filter(
+    (event: { eventType: string }) => event.eventType === 'RESOLVED',
+  ).length;
 
-const enrichedActiveShortages: EnrichedActiveShortageRow[] = activeShortages
-  .map((item: ActiveShortageRow): EnrichedActiveShortageRow => ({
-    cn: item.cn,
-    displayName: item.displayName,
-    hospitalStatusOriginal: item.hospitalStatusOriginal,
-    daysInIssue: calculateDaysInIssue(item.startedAt, now),
-  }))
-  .sort(
-    (a: EnrichedActiveShortageRow, b: EnrichedActiveShortageRow) =>
-      b.daysInIssue - a.daysInIssue || a.cn.localeCompare(b.cn),
-  );
+  const enrichedActiveShortages: EnrichedActiveShortageRow[] = activeShortages
+    .map((item: ActiveShortageRow): EnrichedActiveShortageRow => ({
+      cn: item.cn,
+      displayName: item.displayName,
+      hospitalStatusOriginal: item.hospitalStatusOriginal,
+      daysInIssue: calculateDaysInIssue(item.startedAt, now),
+    }))
+    .sort(
+      (a: EnrichedActiveShortageRow, b: EnrichedActiveShortageRow) =>
+        b.daysInIssue - a.daysInIssue || a.cn.localeCompare(b.cn),
+    );
 
-const averageAge =
-  enrichedActiveShortages.length > 0
-    ? enrichedActiveShortages.reduce(
-        (sum: number, item: EnrichedActiveShortageRow) => sum + item.daysInIssue,
-        0,
-      ) / enrichedActiveShortages.length
-    : 0;
+  const averageAge =
+    enrichedActiveShortages.length > 0
+      ? enrichedActiveShortages.reduce(
+          (sum: number, item: EnrichedActiveShortageRow) => sum + item.daysInIssue,
+          0,
+        ) / enrichedActiveShortages.length
+      : 0;
+
   const longestShortages = enrichedActiveShortages.slice(0, 10);
 
   return (
