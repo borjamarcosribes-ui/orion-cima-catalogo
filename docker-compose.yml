@@ -5,8 +5,10 @@ services:
       dockerfile: Dockerfile
     container_name: integramedcum-app
     restart: unless-stopped
+    depends_on:
+      - postgres
     environment:
-      DATABASE_URL: file:/data/dev.db
+      DATABASE_URL: ${DATABASE_URL}
       AUTH_SECRET: ${AUTH_SECRET}
       AUTH_URL: ${AUTH_URL}
       CRON_SECRET: ${CRON_SECRET}
