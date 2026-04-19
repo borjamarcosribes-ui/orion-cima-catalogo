@@ -4,6 +4,8 @@ import { FormEvent, useMemo, useState, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 
+import { loginAction } from '@/app/login/actions';
+
 type LoginFormProps = {
   callbackUrl?: string;
 };
@@ -25,6 +27,13 @@ export default function LoginForm({ callbackUrl }: LoginFormProps) {
 
     startTransition(async () => {
       try {
+        const precheck = await loginAction({ email, password });
+
+        if (!precheck.ok) {
+          setError(precheck.error ?? 'No se pudo iniciar sesión.');
+          return;
+        }
+
         const result = await signIn('credentials', {
           email,
           password,
@@ -38,7 +47,7 @@ export default function LoginForm({ callbackUrl }: LoginFormProps) {
         }
 
         if (result.error) {
-          setError('Usuario o contraseña incorrectos.');
+          setError('No se pudo iniciar sesión.');
           return;
         }
 
@@ -51,46 +60,44 @@ export default function LoginForm({ callbackUrl }: LoginFormProps) {
   }
 
   return (
-    <div className="card">
-      <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gap: '1rem' }}>
-          <div style={{ display: 'grid', gap: '0.35rem' }}>
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              disabled={isPending}
-              required
-            />
-          </div>
-
-          <div style={{ display: 'grid', gap: '0.35rem' }}>
-            <label htmlFor="password">Contraseña</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={isPending}
-              required
-            />
-          </div>
-
-          {error ? <p style={{ margin: 0 }}>{error}</p> : null}
-
-          <div className="actions-row">
-            <button type="submit" className="primary-button" disabled={isPending}>
-              {isPending ? 'Entrando...' : 'Entrar'}
-            </button>
-          </div>
+    <form onSubmit={handleSubmit}>
+      <div style={{ display: 'grid', gap: '1rem' }}>
+        <div style={{ display: 'grid', gap: '0.35rem' }}>
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            disabled={isPending}
+            required
+          />
         </div>
-      </form>
-    </div>
+
+        <div style={{ display: 'grid', gap: '0.35rem' }}>
+          <label htmlFor="password">Contraseña</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            disabled={isPending}
+            required
+          />
+        </div>
+
+        {error ? <p style={{ margin: 0 }}>{error}</p> : null}
+
+        <div className="actions-row">
+          <button type="submit" className="primary-button" disabled={isPending}>
+            {isPending ? 'Entrando...' : 'Entrar'}
+          </button>
+        </div>
+      </div>
+    </form>
   );
 }

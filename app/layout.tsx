@@ -61,6 +61,7 @@ export default async function RootLayout({
               <NavLink href="/automatizacion">
                 Panel de Automatizaciones
               </NavLink>
+              {role === 'ADMIN' ? <NavLink href="/usuarios">Usuarios</NavLink> : null}
             </nav>
 
             {session?.user ? (

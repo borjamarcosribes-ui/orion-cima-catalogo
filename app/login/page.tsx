@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { auth } from '@/auth';
@@ -21,6 +22,18 @@ export default async function LoginPage() {
         </div>
 
         <LoginForm />
+
+        <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+          <p className="muted" style={{ margin: 0 }}>
+            Si todavía no tienes cuenta, puedes solicitar acceso desde aquí.
+          </p>
+
+          <div className="actions-row" style={{ marginTop: 0 }}>
+            <Link href="/registro" className="secondary-button">
+              Solicitar cuenta
+            </Link>
+          </div>
+        </div>
       </section>
     </div>
   );

@@ -13,17 +13,30 @@ enum AuthRole {
   LECTURA
 }
 
+enum UserApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model AppUser {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  displayName  String?
-  role         AuthRole @default(LECTURA)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id              String             @id @default(cuid())
+  email           String             @unique
+  passwordHash    String
+  displayName     String?
+  role            AuthRole           @default(LECTURA)
+  isActive        Boolean            @default(true)
+  approvalStatus  UserApprovalStatus @default(APPROVED)
+  requestedAt     DateTime?
+  approvedAt      DateTime?
+  approvedByEmail String?
+  rejectedAt      DateTime?
+  rejectedByEmail String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([role, isActive])
+  @@index([approvalStatus, isActive])
   @@map("app_users")
 }
 

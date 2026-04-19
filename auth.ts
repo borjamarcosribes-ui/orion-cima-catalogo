@@ -46,16 +46,21 @@ export const authOptions: NextAuthOptions = {
             passwordHash: true,
             role: true,
             isActive: true,
+            approvalStatus: true,
           },
         });
 
-        if (!user || !user.isActive) {
+        if (!user) {
           return null;
         }
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
 
         if (!isValid) {
+          return null;
+        }
+
+        if (!user.isActive || user.approvalStatus !== 'APPROVED') {
           return null;
         }
 
