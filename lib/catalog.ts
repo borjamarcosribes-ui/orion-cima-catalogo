@@ -28,6 +28,8 @@ export type CatalogListItem = {
   hospitalDescription: string | null;
   bifimedFundingStatus: string | null;
   bifimedSummary: string | null;
+  hasActiveSupplyIssue: boolean;
+  supplyStatusLabel: string | null;
 };
 
 export type CatalogListResult = {
@@ -98,12 +100,19 @@ type CatalogCimaRow = {
   pdfUrl: string | null;
 };
 
+type WatchedSupplyStatusRow = {
+  hasActiveSupplyIssue: boolean;
+  issueType: string | null;
+  observations: string | null;
+};
+
 type CatalogWatchedRow = {
   cn: string;
   articleCode: string;
   shortDescription: string;
   statusOriginal: string;
   lastSeenAt: Date;
+  supplyStatus: WatchedSupplyStatusRow | null;
 };
 
 type CatalogBifimedRow = {
@@ -182,6 +191,58 @@ function matchesHospitalStatus(
   }
 }
 
+function hasDeclaredSupplyIssueFromCima(
+  supplyStatus: string | null | undefined,
+): boolean {
+  const normalized = normalizeSearchValue(supplyStatus);
+
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized !== 'sin problemas de suministro';
+}
+
+function resolveSupplySignal(
+  watched: CatalogWatchedRow | null,
+  cima: CatalogCimaRow | null,
+): {
+  hasActiveSupplyIssue: boolean;
+  supplyStatusLabel: string | null;
+} {
+  // Prioridad absoluta al monitor/API para watched si ya existe fila operativa.
+  if (watched?.supplyStatus) {
+    if (watched.supplyStatus.hasActiveSupplyIssue) {
+      return {
+        hasActiveSupplyIssue: true,
+        supplyStatusLabel:
+          watched.supplyStatus.issueType ??
+          watched.supplyStatus.observations ??
+          cima?.supplyStatus ??
+          'Problema de suministro declarado',
+      };
+    }
+
+    return {
+      hasActiveSupplyIssue: false,
+      supplyStatusLabel: null,
+    };
+  }
+
+  // Si no hay dato operativo del monitor, caemos a caché CIMA.
+  if (hasDeclaredSupplyIssueFromCima(cima?.supplyStatus)) {
+    return {
+      hasActiveSupplyIssue: true,
+      supplyStatusLabel: cima?.supplyStatus ?? 'Problema de suministro declarado',
+    };
+  }
+
+  return {
+    hasActiveSupplyIssue: false,
+    supplyStatusLabel: null,
+  };
+}
+
 export async function listCatalogByCn(
   filters: CatalogFilters,
 ): Promise<CatalogListResult> {
@@ -223,6 +284,13 @@ export async function listCatalogByCn(
           shortDescription: true,
           statusOriginal: true,
           lastSeenAt: true,
+          supplyStatus: {
+            select: {
+              hasActiveSupplyIssue: true,
+              issueType: true,
+              observations: true,
+            },
+          },
         },
       }),
       prisma.bifimedCache.findMany({
@@ -255,6 +323,7 @@ export async function listCatalogByCn(
       const cima = cimaByCn.get(row.cn) ?? null;
       const watched = watchedByCn.get(row.cn) ?? null;
       const bifimed = bifimedByCn.get(row.cn) ?? null;
+      const supply = resolveSupplySignal(watched, cima);
 
       return {
         cn: row.cn,
@@ -272,6 +341,8 @@ export async function listCatalogByCn(
         hospitalDescription: watched?.shortDescription ?? null,
         bifimedFundingStatus: bifimed?.fundingStatus ?? null,
         bifimedSummary: bifimed?.summary ?? null,
+        hasActiveSupplyIssue: supply.hasActiveSupplyIssue,
+        supplyStatusLabel: supply.supplyStatusLabel,
       };
     },
   );

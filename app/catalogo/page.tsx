@@ -201,6 +201,14 @@ export default async function CatalogPage({ searchParams }: PageProps) {
                   <div className="muted">CN {medicine.cn}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {medicine.hasActiveSupplyIssue ? (
+                    <span
+                      className="badge danger"
+                      title={medicine.supplyStatusLabel ?? 'Problema de suministro declarado'}
+                    >
+                      Problema de suministro
+                    </span>
+                  ) : null}
                   <span className={commercialization.className}>{commercialization.label}</span>
                   <span className={financing.className}>{financing.label}</span>
                 </div>
