@@ -4,9 +4,13 @@ import Link from 'next/link';
 import { useActionState, useEffect, useRef } from 'react';
 
 import {
-  initialRegisterState,
   registerAction,
+  type RegisterState,
 } from '@/app/registro/actions';
+
+const initialRegisterState: RegisterState = {
+  status: 'idle',
+};
 
 export default function RegisterForm() {
   const formRef = useRef<HTMLFormElement>(null);
