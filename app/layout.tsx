@@ -10,6 +10,18 @@ type AppRole = 'ADMIN' | 'LECTURA';
 export const metadata: Metadata = {
   title: 'Integramécum | Catálogo integrado',
   description: 'Catálogo Integrado CIMA + BIFIMED + Orion Logis.',
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+      nosnippet: true,
+      noarchive: true,
+    },
+  },
 };
 
 export default async function RootLayout({
