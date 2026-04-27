@@ -22,6 +22,7 @@ type MonitorClientProps = {
   runNomenclatorUpdateAction: () => Promise<RunNomenclatorUpdateActionResult>;
   getMedicineAlternativesAction: (input: { cn: string }) => Promise<GetMedicineAlternativesOutput>;
   latestNomenclatorRun: NomenclatorJobRunOverview | null;
+  canManageManualActions: boolean;
 };
 
 type SortColumn = 'cn' | 'status' | 'shortDescription' | 'issueType' | 'startedAt' | 'expectedEndAt';
@@ -174,6 +175,7 @@ export default function MonitorClient({
   runNomenclatorUpdateAction,
   getMedicineAlternativesAction,
   latestNomenclatorRun,
+  canManageManualActions,
 }: MonitorClientProps) {
   const router = useRouter();
   const [monitorMessage, setMonitorMessage] = useState<string | null>(null);
@@ -243,6 +245,10 @@ export default function MonitorClient({
   }
 
   async function handleRunMonitor() {
+    if (!canManageManualActions) {
+      return;
+    }
+
     setMonitorMessage(null);
     setPendingAction('monitor');
 
@@ -273,6 +279,10 @@ export default function MonitorClient({
   }
 
   async function handleRunNomenclatorUpdate() {
+    if (!canManageManualActions) {
+      return;
+    }
+
     setNomenclatorMessage(null);
     setPendingAction('nomenclator');
 
@@ -372,7 +382,7 @@ export default function MonitorClient({
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={isMonitorRunning}
+              disabled={!canManageManualActions || isMonitorRunning}
               onClick={handleRunMonitor}
               style={
                 isMonitorRunning
@@ -443,7 +453,7 @@ export default function MonitorClient({
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={isNomenclatorRunning}
+              disabled={!canManageManualActions || isNomenclatorRunning}
               onClick={handleRunNomenclatorUpdate}
               style={
                 isNomenclatorRunning
