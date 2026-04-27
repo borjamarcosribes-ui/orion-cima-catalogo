@@ -22,7 +22,6 @@ type MonitorClientProps = {
   runNomenclatorUpdateAction: () => Promise<RunNomenclatorUpdateActionResult>;
   getMedicineAlternativesAction: (input: { cn: string }) => Promise<GetMedicineAlternativesOutput>;
   latestNomenclatorRun: NomenclatorJobRunOverview | null;
-  canManageManualActions: boolean;
 };
 
 type SortColumn = 'cn' | 'status' | 'shortDescription' | 'issueType' | 'startedAt' | 'expectedEndAt';
@@ -62,24 +61,6 @@ function formatDateOnly(value: string | null): string {
   return new Intl.DateTimeFormat('es-ES', {
     dateStyle: 'short',
   }).format(new Date(value));
-}
-
-function formatCsvDate(value: string | null): string {
-  if (!value) {
-    return '';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  return date.toISOString().slice(0, 10);
-}
-
-function escapeCsvCell(value: string | number | null | undefined): string {
-  const stringValue = value === null || value === undefined ? '' : String(value);
-  return `"${stringValue.replace(/"/g, '""')}"`;
 }
 
 function compareNullableStrings(left: string | null, right: string | null, direction: SortDirection): number {
@@ -182,6 +163,10 @@ function getHospitalPresenceLabel(value: MedicineAlternative['hospitalPresenceSt
   return value === 'NO_PRESENTE' ? 'No' : 'Sí';
 }
 
+function normalizeSearchValue(value: string): string {
+  return value.trim().toLocaleLowerCase('es');
+}
+
 export default function MonitorClient({
   overview,
   activeIssues,
@@ -189,7 +174,6 @@ export default function MonitorClient({
   runNomenclatorUpdateAction,
   getMedicineAlternativesAction,
   latestNomenclatorRun,
-  canManageManualActions,
 }: MonitorClientProps) {
   const router = useRouter();
   const [monitorMessage, setMonitorMessage] = useState<string | null>(null);
@@ -198,6 +182,7 @@ export default function MonitorClient({
   const [, startTransition] = useTransition();
   const [showActivo, setShowActivo] = useState(true);
   const [showLab, setShowLab] = useState(true);
+  const [activeIssueSearch, setActiveIssueSearch] = useState('');
   const [sortColumn, setSortColumn] = useState<SortColumn>('startedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [expandedCn, setExpandedCn] = useState<string | null>(null);
@@ -210,18 +195,29 @@ export default function MonitorClient({
   const isNomenclatorRunning = pendingAction === 'nomenclator';
 
   const filteredActiveIssues = useMemo(() => {
-    if ((!showActivo && !showLab) || (showActivo && showLab)) {
-      return activeIssues;
-    }
+    const searchValue = normalizeSearchValue(activeIssueSearch);
 
     return activeIssues.filter((issue) => {
-      if (showActivo) {
-        return issue.status === 'ACTIVO';
+      const matchesStatus =
+        (!showActivo && !showLab) ||
+        (showActivo && showLab) ||
+        (showActivo && issue.status === 'ACTIVO') ||
+        (showLab && issue.status === 'LAB');
+
+      if (!matchesStatus) {
+        return false;
       }
 
-      return issue.status === 'LAB';
+      if (!searchValue) {
+        return true;
+      }
+
+      const normalizedCn = normalizeSearchValue(issue.cn);
+      const normalizedDescription = normalizeSearchValue(issue.shortDescription);
+
+      return normalizedCn.includes(searchValue) || normalizedDescription.includes(searchValue);
     });
-  }, [activeIssues, showActivo, showLab]);
+  }, [activeIssues, showActivo, showLab, activeIssueSearch]);
 
   const sortedActiveIssues = useMemo(
     () => [...filteredActiveIssues].sort((left, right) => compareActiveIssues(left, right, sortColumn, sortDirection)),
@@ -244,42 +240,6 @@ export default function MonitorClient({
     }
 
     return sortDirection === 'asc' ? ' ↑' : ' ↓';
-  }
-
-  function handleExportActiveIssues() {
-    const exportRows = [...activeIssues].sort((left, right) =>
-      compareActiveIssues(left, right, sortColumn, sortDirection),
-    );
-
-    const headers = ['CN', 'Estado', 'Descripción', 'Tipo', 'Inicio', 'Fin Esperado', 'Observaciones'];
-
-    const lines = [
-      headers.map((header) => escapeCsvCell(header)).join(','),
-      ...exportRows.map((issue) =>
-        [
-          escapeCsvCell(issue.cn),
-          escapeCsvCell(issue.status),
-          escapeCsvCell(issue.shortDescription),
-          issue.issueType && /^\d+$/.test(issue.issueType.trim()) ? issue.issueType.trim() : '',
-          escapeCsvCell(formatCsvDate(issue.startedAt)),
-          escapeCsvCell(formatCsvDate(issue.expectedEndAt)),
-          escapeCsvCell(issue.observations ?? ''),
-        ].join(','),
-      ),
-    ];
-
-    const csvContent = `\uFEFF${lines.join('\r\n')}`;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-
-    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `roturas-activas-${timestamp}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   }
 
   async function handleRunMonitor() {
@@ -400,17 +360,19 @@ export default function MonitorClient({
         <article className="card">
           <div className="section-title">
             <div>
-              <h1>Estado Actualización Problemas de Suministro</h1>
+              <div className="badge primary">Suministro</div>
+              <h1>Monitor AEMPS / CIMA</h1>
             </div>
+            <span className="badge success">Consulta manual por CN</span>
           </div>
           <p className="muted">
-            La consulta de los problemas de suministro se realiza de manera automática tres veces al día. Si se desea
-            forzar la consulta se puede forzar manualmente pulsando el botón.
+            Esta vista monitoriza los medicamentos vigilables ya conocidos por la app. El TSV solo refresca el universo de
+            productos vigilados; la vigilancia sigue funcionando sobre los CN ya guardados.
           </p>
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={isMonitorRunning || !canManageManualActions}
+              disabled={isMonitorRunning}
               onClick={handleRunMonitor}
               style={
                 isMonitorRunning
@@ -426,10 +388,11 @@ export default function MonitorClient({
             >
               {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
             </button>
+            <span className="muted">
+              El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
+              abortar todo el run.
+            </span>
           </div>
-          {!canManageManualActions ? (
-            <p className="muted">Modo lectura: solo ADMIN puede ejecutar el monitor manual.</p>
-          ) : null}
           {monitorMessage ? <p className="muted">{monitorMessage}</p> : null}
 
           {overview.latestRun ? (
@@ -469,17 +432,18 @@ export default function MonitorClient({
         <article className="card">
           <div className="section-title">
             <div>
-              <h1>Estado de actualización del Nomenclátor de prescripción</h1>
+              <div className="badge primary">Nomenclátor</div>
+              <h1>Nomenclátor de prescripción</h1>
             </div>
+            <span className="badge success">Actualización manual</span>
           </div>
           <p className="muted">
-            Cada madrugada se actualiza automáticamente el nomenclátor de prescripción. Si se desea forzar ahora, pulsa
-            el botón.
+            Actualiza la base local de especialidades equivalentes desde el fichero de Nomenclátor disponible en disco.
           </p>
           <div className="actions-row">
             <button
               className="primary-button"
-              disabled={isNomenclatorRunning || !canManageManualActions}
+              disabled={isNomenclatorRunning}
               onClick={handleRunNomenclatorUpdate}
               style={
                 isNomenclatorRunning
@@ -495,14 +459,8 @@ export default function MonitorClient({
             >
               {isNomenclatorRunning ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
             </button>
-            <span className="muted">
-              El proceso genera una descarga automática del ZIP del nomenclátor de prescripción desde su web oficial,
-              lo descomprime y carga el archivo Prescripcion.xml
-            </span>
+            <span className="muted">Importa el XML local configurado y refresca el resumen operativo al terminar.</span>
           </div>
-          {!canManageManualActions ? (
-            <p className="muted">Modo lectura: solo ADMIN puede ejecutar la actualización manual del Nomenclátor.</p>
-          ) : null}
           {nomenclatorMessage ? <p className="muted">{nomenclatorMessage}</p> : null}
           {latestNomenclatorRun ? (
             <ul className="list compact-list" style={{ marginTop: 18 }}>
@@ -618,14 +576,14 @@ export default function MonitorClient({
                 <input checked={showLab} onChange={(event) => setShowLab(event.target.checked)} type="checkbox" />
                 <span>LAB</span>
               </label>
-              <button
-                className="primary-button"
-                onClick={handleExportActiveIssues}
-                style={{ marginLeft: 'auto' }}
-                type="button"
-              >
-                Exportar CSV
-              </button>
+              <input
+                aria-label="Buscar por CN o descripción"
+                onChange={(event) => setActiveIssueSearch(event.target.value)}
+                placeholder="Buscar CN o descripción"
+                style={{ maxWidth: 320 }}
+                type="text"
+                value={activeIssueSearch}
+              />
             </div>
             <div className="table-scroll">
               <table className="table">
