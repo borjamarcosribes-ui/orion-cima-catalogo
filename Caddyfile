@@ -1,0 +1,9 @@
+integramecum.farmaciahusja.es {
+  encode zstd gzip
+
+  header {
+    X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+  }
+
+  reverse_proxy app:3000
+}

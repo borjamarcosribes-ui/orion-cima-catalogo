@@ -1,0 +1,265 @@
+import Link from 'next/link';
+
+import { CatalogFiltersForm } from './catalog-filters';
+import { listCatalogByCn, type CatalogFilters } from '@/lib/catalog';
+
+const EMPTY_VALUE = '';
+
+type CommercializedValue = '' | 'COMERCIALIZADO' | 'NO_COMERCIALIZADO';
+type BifimedValue = '' | 'FINANCIADO' | 'NO_FINANCIADO' | 'EN_ESTUDIO';
+type HospitalStatusValue = '' | 'ACTIVO' | 'INACTIVO' | 'LAB' | 'OTROS';
+
+function toUrlSearchParams(filters: CatalogFilters, options?: { forceCommercializedParam?: boolean }): string {
+  const params = new URLSearchParams();
+
+  if (filters.q) params.set('q', filters.q);
+  if (filters.activeIngredient) params.set('activeIngredient', filters.activeIngredient);
+  if (filters.cn) params.set('cn', filters.cn);
+  if (filters.laboratory) params.set('laboratory', filters.laboratory);
+  if (filters.atc) params.set('atc', filters.atc);
+  if (filters.commercializationStatus || options?.forceCommercializedParam) {
+    params.set('commercialized', filters.commercializationStatus ?? '');
+  }
+  if (filters.includedInHospital) params.set('included', filters.includedInHospital);
+  if (filters.hospitalStatus) params.set('hospitalStatus', filters.hospitalStatus);
+  if (filters.bifimedFundingStatus) params.set('bifimed', filters.bifimedFundingStatus);
+  if (filters.page && filters.page > 1) params.set('page', String(filters.page));
+
+  return params.toString();
+}
+
+function normalizeQuery(value: string | string[] | undefined): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  return EMPTY_VALUE;
+}
+
+function parseCommercialized(raw: string): { value: CommercializedValue; isValid: boolean } {
+  if (raw === '') {
+    return { value: '', isValid: true };
+  }
+
+  if (raw === 'COMERCIALIZADO') {
+    return { value: 'COMERCIALIZADO', isValid: true };
+  }
+
+  if (raw === 'NO_COMERCIALIZADO') {
+    return { value: 'NO_COMERCIALIZADO', isValid: true };
+  }
+
+  return { value: 'COMERCIALIZADO', isValid: false };
+}
+
+function parseIncluded(raw: string): 'SI' | 'NO' | undefined {
+  if (raw === 'SI' || raw === 'NO') {
+    return raw;
+  }
+
+  return undefined;
+}
+
+function parseHospitalStatus(raw: string): HospitalStatusValue {
+  if (raw === '' || raw === 'ACTIVO' || raw === 'INACTIVO' || raw === 'LAB' || raw === 'OTROS') {
+    return raw;
+  }
+
+  return '';
+}
+
+function parseBifimed(raw: string): BifimedValue {
+  if (raw === '' || raw === 'FINANCIADO' || raw === 'NO_FINANCIADO' || raw === 'EN_ESTUDIO') {
+    return raw;
+  }
+
+  return '';
+}
+
+function parsePage(raw: string): number {
+  const parsed = Number(raw);
+
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return 1;
+}
+
+function formatBool(value: boolean): string {
+  return value ? 'Sí' : 'No';
+}
+
+function bifimedBadge(status: string | null): { label: string; className: string } {
+  if (status === 'FINANCIADO') {
+    return { label: 'Financiado', className: 'badge success' };
+  }
+
+  if (status === 'NO_FINANCIADO') {
+    return { label: 'No financiado', className: 'badge danger' };
+  }
+
+  if (status === 'EN_ESTUDIO') {
+    return { label: 'En estudio', className: 'badge warning' };
+  }
+
+  return { label: 'Sin dato BIFIMED', className: 'badge' };
+}
+
+function commercializationBadge(status: string): { label: string; className: string } {
+  if (status === 'COMERCIALIZADO') {
+    return { label: 'Comercializado', className: 'badge success' };
+  }
+
+  if (status === 'NO_COMERCIALIZADO') {
+    return { label: 'No comercializado', className: 'badge danger' };
+  }
+
+  return { label: status, className: 'badge warning' };
+}
+
+type PageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function CatalogPage({ searchParams }: PageProps) {
+  const query = await searchParams;
+  const hasCommercializedParam = Object.prototype.hasOwnProperty.call(query, 'commercialized');
+  const commercializedRaw = normalizeQuery(query.commercialized);
+  const commercializedParsed = parseCommercialized(commercializedRaw);
+  const commercializedHasValidParam = hasCommercializedParam && commercializedParsed.isValid;
+  const commercializedExplicitAll = commercializedHasValidParam && commercializedParsed.value === '';
+  const includedInHospital = parseIncluded(normalizeQuery(query.included));
+  const hospitalStatusParsed = parseHospitalStatus(normalizeQuery(query.hospitalStatus));
+
+  const filters: CatalogFilters = {
+    q: normalizeQuery(query.q),
+    activeIngredient: normalizeQuery(query.activeIngredient),
+    cn: normalizeQuery(query.cn),
+    laboratory: normalizeQuery(query.laboratory),
+    atc: normalizeQuery(query.atc),
+    commercializationStatus: commercializedHasValidParam ? commercializedParsed.value : 'COMERCIALIZADO',
+    includedInHospital,
+    hospitalStatus: includedInHospital === 'SI' && hospitalStatusParsed !== '' ? hospitalStatusParsed : undefined,
+    bifimedFundingStatus: parseBifimed(normalizeQuery(query.bifimed)),
+    page: parsePage(normalizeQuery(query.page)),
+  };
+
+  const data = await listCatalogByCn(filters);
+  const previousParams = toUrlSearchParams(
+    { ...filters, page: Math.max(data.page - 1, 1) },
+    { forceCommercializedParam: commercializedExplicitAll },
+  );
+  const nextParams = toUrlSearchParams(
+    { ...filters, page: data.page + 1 },
+    { forceCommercializedParam: commercializedExplicitAll },
+  );
+
+  return (
+    <div className="grid" style={{ gap: 24 }}>
+      <section className="card">
+        <div className="section-title">
+          <div>
+            <h1>Buscador CIMA Integrada con Bifimed y Orion Logis</h1>
+          </div>
+        </div>
+
+        <CatalogFiltersForm
+          q={filters.q ?? ''}
+          activeIngredient={filters.activeIngredient ?? ''}
+          cn={filters.cn ?? ''}
+          laboratory={filters.laboratory ?? ''}
+          atc={filters.atc ?? ''}
+          commercialized={filters.commercializationStatus ?? ''}
+          included={filters.includedInHospital ?? ''}
+          hospitalStatus={filters.hospitalStatus ?? ''}
+          bifimed={filters.bifimedFundingStatus ?? ''}
+        />
+      </section>
+
+      <section className="grid" style={{ gap: 14 }}>
+        <p className="muted">Resultados: {data.total}</p>
+        <p className="muted">
+          Si no hay datos cargados en caché local de BIFIMED o documentos CIMA, se mostrará “Sin dato” o “En
+          estudio”.
+        </p>
+
+        {data.rows.map((medicine) => {
+          const financing = bifimedBadge(medicine.bifimedFundingStatus);
+          const commercialization = commercializationBadge(medicine.commercializationStatus);
+
+          return (
+            <Link
+              href={`/catalogo/${medicine.cn}`}
+              key={medicine.cn}
+              className="card"
+              style={{ textDecoration: 'none', color: 'inherit' }}
+            >
+              <div className="section-title">
+                <div>
+                  <h2 style={{ marginBottom: 4 }}>{medicine.displayName}</h2>
+                  <div className="muted">CN {medicine.cn}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {medicine.hasActiveSupplyIssue ? (
+                    <span
+                      className="badge danger"
+                      title={medicine.supplyStatusLabel ?? 'Problema de suministro declarado'}
+                    >
+                      Problema de suministro
+                    </span>
+                  ) : null}
+                  <span className={commercialization.className}>{commercialization.label}</span>
+                  <span className={financing.className}>{financing.label}</span>
+                </div>
+              </div>
+
+              <div className="grid cols-3" style={{ gap: 10 }}>
+                <div>
+                  <small className="muted">Principio activo</small>
+                  <div>{medicine.activeIngredient ?? 'Sin dato CIMA'}</div>
+                </div>
+                <div>
+                  <small className="muted">Laboratorio</small>
+                  <div>{medicine.laboratory ?? 'Sin dato CIMA'}</div>
+                </div>
+                <div>
+                  <small className="muted">ATC</small>
+                  <div>{medicine.atcCode ?? 'Sin dato CIMA'}</div>
+                </div>
+                <div>
+                  <small className="muted">Incluido en hospital</small>
+                  <div>{formatBool(medicine.includedInHospital)}</div>
+                </div>
+                <div>
+                  <small className="muted">Estado hospitalario</small>
+                  <div>{medicine.hospitalStatusOriginal ?? 'No detectado en Orion'}</div>
+                </div>
+                <div>
+                  <small className="muted">Descripción local</small>
+                  <div>{medicine.hospitalDescription ?? 'Sin descripción local'}</div>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+
+        {data.rows.length === 0 && (
+          <article className="card">
+            <p>No hay resultados con los filtros aplicados.</p>
+          </article>
+        )}
+
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Link className="secondary-button" href={`/catalogo?${previousParams}`} aria-disabled={data.page <= 1}>
+            Página anterior
+          </Link>
+          <span className="muted">Página {data.page}</span>
+          <Link className="secondary-button" href={`/catalogo?${nextParams}`}>
+            Página siguiente
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}

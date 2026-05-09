@@ -1,0 +1,415 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/postgres-client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthRole {
+  ADMIN
+  LECTURA
+}
+
+enum UserApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model AppUser {
+  id              String             @id @default(cuid())
+  email           String             @unique
+  passwordHash    String
+  displayName     String?
+  role            AuthRole           @default(LECTURA)
+  isActive        Boolean            @default(true)
+  approvalStatus  UserApprovalStatus @default(APPROVED)
+  requestedAt     DateTime?
+  approvedAt      DateTime?
+  approvedByEmail String?
+  rejectedAt      DateTime?
+  rejectedByEmail String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([role, isActive])
+  @@index([approvalStatus, isActive])
+  @@map("app_users")
+}
+
+model ImportBatch {
+  id                String           @id @default(cuid())
+  originalFileName  String
+  sourceSystem      String           @default("orion-logis")
+  uploadedAt        DateTime         @default(now())
+  processedAt       DateTime?
+  status            String           @default("pending")
+  sheetName         String?
+  codeColumn        String
+  descriptionColumn String
+  totalRows         Int              @default(0)
+  validRows         Int              @default(0)
+  discardedRows     Int              @default(0)
+  notes             String?
+  rawRows           RawImportRow[]
+  snapshotRows      MedicineSnapshot[]
+
+  @@map("import_batches")
+}
+
+model RawImportRow {
+  id              String      @id @default(cuid())
+  importBatchId   String
+  rowNumber       Int
+  rawPayload      String
+  orionCode       String?
+  description     String?
+  isValidMedicine Boolean     @default(false)
+  nationalCode    String?
+  discardReason   String?
+  createdAt       DateTime    @default(now())
+  importBatch     ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  @@index([importBatchId, rowNumber])
+  @@index([nationalCode])
+  @@map("raw_import_rows")
+}
+
+model MedicineSnapshot {
+  id               String      @id @default(cuid())
+  importBatchId    String
+  nationalCode     String
+  orionCode        String
+  localDescription String?
+  sourceRowNumber  Int
+  createdAt        DateTime    @default(now())
+  importBatch      ImportBatch @relation(fields: [importBatchId], references: [id], onDelete: Cascade)
+
+  @@unique([importBatchId, nationalCode])
+  @@index([importBatchId])
+  @@index([nationalCode])
+  @@map("medicines_snapshot")
+}
+
+model MedicineMaster {
+  nationalCode      String            @id
+  latestOrionCode   String?
+  preferredLabel    String?
+  firstSeenAt       DateTime?
+  lastSeenAt        DateTime?
+  isCurrentlyActive Boolean           @default(true)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  cimaCache         CimaCache?
+  supplyAlerts      SupplyAlert[]
+  annotations       LocalAnnotation[]
+
+  @@map("medicines_master")
+}
+
+model CimaCache {
+  nationalCode            String                    @id
+  officialName            String?
+  activeIngredient        String?
+  atcCode                 String?
+  laboratory              String?
+  commercializationStatus String?
+  supplyStatus            String?
+  technicalSheetUrl       String?
+  leafletUrl              String?
+  leafletHtmlUrl          String?
+  htmlUrl                 String?
+  pdfUrl                  String?
+  rawPayload              String?
+  fetchedAt               DateTime?
+  updatedAt               DateTime                  @updatedAt
+  medicineMaster          MedicineMaster            @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+  characteristics         CimaCharacteristicCache[]
+
+  @@index([atcCode])
+  @@index([laboratory])
+  @@map("cima_cache")
+}
+
+model CimaCharacteristicCache {
+  id              String    @id @default(cuid())
+  nationalCode    String
+  label           String
+  normalizedLabel String
+  sortOrder       Int
+  rawPayload      String?
+  updatedAt       DateTime  @updatedAt
+  cima            CimaCache @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+
+  @@unique([nationalCode, normalizedLabel])
+  @@index([nationalCode, sortOrder])
+  @@index([normalizedLabel])
+  @@map("cima_characteristic_cache")
+}
+
+model SupplyAlert {
+  id             String         @id @default(cuid())
+  nationalCode   String
+  source         String         @default("cima")
+  status         String
+  startDate      DateTime?
+  endDate        DateTime?
+  summary        String?
+  rawPayload     String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  medicineMaster MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+
+  @@index([nationalCode, status])
+  @@map("supply_alerts")
+}
+
+model LocalAnnotation {
+  id             String         @id @default(cuid())
+  nationalCode   String
+  noteType       String         @default("general")
+  note           String
+  severity       String?
+  createdBy      String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  medicineMaster MedicineMaster @relation(fields: [nationalCode], references: [nationalCode], onDelete: Cascade)
+
+  @@index([nationalCode, noteType])
+  @@map("local_annotations")
+}
+
+model TsvImport {
+  id             String           @id @default(cuid())
+  fileName       String
+  importedAt     DateTime         @default(now())
+  rowCount       Int
+  validItems     Int
+  duplicateCount Int
+  warningCount   Int
+  errorCount     Int
+  warningsJson   String
+  errorsJson     String
+  items          TsvImportItem[]
+  watchedRows    WatchedMedicine[]
+
+  @@index([importedAt])
+  @@map("tsv_imports")
+}
+
+model TsvImportItem {
+  id               String    @id @default(cuid())
+  tsvImportId      String
+  articleCode      String
+  shortDescription String
+  longDescription  String?
+  unit             String?
+  statusOriginal   String
+  statusNormalized String
+  rowNumber        Int
+  createdAt        DateTime  @default(now())
+  tsvImport        TsvImport @relation(fields: [tsvImportId], references: [id], onDelete: Cascade)
+
+  @@unique([tsvImportId, articleCode])
+  @@index([tsvImportId])
+  @@index([articleCode])
+  @@map("tsv_import_items")
+}
+
+model WatchedMedicine {
+  id               String                  @id @default(cuid())
+  articleCode      String                  @unique
+  cn               String                  @unique
+  shortDescription String
+  statusOriginal   String
+  statusNormalized String
+  isWatched        Boolean                 @default(true)
+  firstSeenAt      DateTime                @default(now())
+  lastSeenAt       DateTime                @default(now())
+  lastImportId     String?
+  lastImport       TsvImport?              @relation(fields: [lastImportId], references: [id], onDelete: SetNull)
+  supplyStatus     SupplyStatus?
+  events           SupplyMonitoringEvent[]
+
+  @@index([cn])
+  @@index([isWatched])
+  @@map("watched_medicines")
+}
+
+model SupplyStatus {
+  id                   String          @id @default(cuid())
+  watchedMedicineId    String          @unique
+  cn                   String          @unique
+  hasActiveSupplyIssue Boolean         @default(false)
+  issueType            String?
+  startedAt            DateTime?
+  expectedEndAt        DateTime?
+  resolvedAt           DateTime?
+  observations         String?
+  rawPayload           String?
+  lastCheckedAt        DateTime
+  updatedAt            DateTime        @updatedAt
+  watchedMedicine      WatchedMedicine @relation(fields: [watchedMedicineId], references: [id], onDelete: Cascade)
+
+  @@index([hasActiveSupplyIssue])
+  @@index([lastCheckedAt])
+  @@map("supply_statuses")
+}
+
+model SupplyMonitorRun {
+  id              String                  @id @default(cuid())
+  startedAt       DateTime                @default(now())
+  finishedAt      DateTime?
+  status          String                  @default("running")
+  checkedProducts Int                     @default(0)
+  changedProducts Int                     @default(0)
+  activeIssues    Int                     @default(0)
+  newIssues       Int                     @default(0)
+  resolvedIssues  Int                     @default(0)
+  errorsJson      String?
+  source          String                  @default("manual")
+  events          SupplyMonitoringEvent[]
+
+  @@index([startedAt])
+  @@map("supply_monitor_runs")
+}
+
+model SupplyMonitoringEvent {
+  id                String           @id @default(cuid())
+  monitorRunId      String
+  watchedMedicineId String
+  cn                String
+  eventType         String
+  previousStateJson String?
+  currentStateJson  String?
+  createdAt         DateTime         @default(now())
+  monitorRun        SupplyMonitorRun @relation(fields: [monitorRunId], references: [id], onDelete: Cascade)
+  watchedMedicine   WatchedMedicine  @relation(fields: [watchedMedicineId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([cn, eventType])
+  @@index([monitorRunId])
+  @@index([watchedMedicineId])
+  @@map("supply_monitoring_events")
+}
+
+model NomenclatorProduct {
+  cn                      String   @id
+  codDcp                  String
+  presentation            String
+  officialName            String?
+  commercializationStatus String
+  rawPayload              String?
+  importedAt              DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([codDcp])
+  @@index([commercializationStatus])
+  @@index([codDcp, commercializationStatus])
+  @@map("nomenclator_products")
+}
+
+model BifimedCache {
+  cn                       String                   @id
+  fundingStatus            String
+  fundingModality          String?
+  restrictedConditions     String?
+  specialFundingConditions String?
+  nomenclatorState         String?
+  summary                  String?
+  rawPayload               String?
+  updatedAt                DateTime                 @updatedAt
+  indications              BifimedIndicationCache[]
+
+  @@index([fundingStatus])
+  @@map("bifimed_cache")
+}
+
+model BifimedIndicationCache {
+  id                          String       @id @default(cuid())
+  cn                          String
+  sortOrder                   Int
+  authorizedIndication        String
+  indicationFileStatus        String?
+  indicationFundingResolution String?
+  rawPayload                  String?
+  updatedAt                   DateTime     @updatedAt
+  bifimed                     BifimedCache @relation(fields: [cn], references: [cn], onDelete: Cascade)
+
+  @@index([cn, sortOrder])
+  @@map("bifimed_indication_cache")
+}
+
+model ScheduledJobRun {
+  id             String   @id @default(cuid())
+  jobName        String
+  triggerType    String
+  requestedAt    DateTime @default(now())
+  requestedBy    String?
+  startedAt      DateTime @default(now())
+  finishedAt     DateTime?
+  status         String   @default("running")
+  lockKey        String?
+  idempotencyKey String?
+  summaryJson    String?
+  errorsJson     String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([jobName, startedAt])
+  @@index([status, startedAt])
+  @@index([lockKey])
+  @@map("scheduled_job_runs")
+}
+
+model ExecutionLock {
+  key          String   @id
+  ownerRunId   String
+  acquiredAt   DateTime @default(now())
+  expiresAt    DateTime
+  heartbeatAt  DateTime @default(now())
+  metadataJson String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("execution_locks")
+}
+
+model SupplyNotificationSubscription {
+  id         String                  @id @default(cuid())
+  email      String                  @unique
+  enabled    Boolean                 @default(true)
+  endDate    DateTime?
+  lastSentAt DateTime?
+  createdAt  DateTime                @default(now())
+  updatedAt  DateTime                @updatedAt
+  runs       SupplyNotificationRun[]
+
+  @@index([enabled])
+  @@index([endDate])
+  @@map("supply_notification_subscriptions")
+}
+
+model SupplyNotificationRun {
+  id             String                         @id @default(cuid())
+  subscriptionId String
+  windowStart    DateTime
+  windowEnd      DateTime
+  status         String                         @default("pending")
+  eventsCount    Int                            @default(0)
+  sentAt         DateTime?
+  errorMessage   String?
+  summaryJson    String?
+  createdAt      DateTime                       @default(now())
+  updatedAt      DateTime                       @updatedAt
+  subscription   SupplyNotificationSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, createdAt])
+  @@index([status, createdAt])
+  @@index([windowStart, windowEnd])
+  @@map("supply_notification_runs")
+}

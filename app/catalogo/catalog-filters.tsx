@@ -1,0 +1,126 @@
+'use client';
+
+import Link from 'next/link';
+import { useState } from 'react';
+
+type CatalogFiltersFormProps = {
+  q: string;
+  activeIngredient: string;
+  cn: string;
+  laboratory: string;
+  atc: string;
+  commercialized: string;
+  included: string;
+  hospitalStatus: string;
+  bifimed: string;
+};
+
+const fieldStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+};
+
+const controlStyle: React.CSSProperties = {
+  width: '100%',
+};
+
+export function CatalogFiltersForm(props: CatalogFiltersFormProps) {
+  const [included, setIncluded] = useState(props.included);
+  const [hospitalStatus, setHospitalStatus] = useState(included === 'SI' ? props.hospitalStatus : '');
+
+  return (
+    <form method="get" className="grid cols-3" style={{ gap: 12, marginTop: 16 }}>
+      <label style={fieldStyle}>
+        <small className="muted">Nombre del medicamento</small>
+        <input name="q" defaultValue={props.q} style={controlStyle} />
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">Principio activo</small>
+        <input name="activeIngredient" defaultValue={props.activeIngredient} style={controlStyle} />
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">CN</small>
+        <input name="cn" defaultValue={props.cn} style={controlStyle} />
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">Laboratorio</small>
+        <input name="laboratory" defaultValue={props.laboratory} style={controlStyle} />
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">ATC</small>
+        <input name="atc" defaultValue={props.atc} style={controlStyle} />
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">Comercializado</small>
+        <select name="commercialized" defaultValue={props.commercialized} style={controlStyle}>
+          <option value="">Todos</option>
+          <option value="COMERCIALIZADO">Comercializado</option>
+          <option value="NO_COMERCIALIZADO">No comercializado</option>
+        </select>
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">Incluido en hospital</small>
+        <select
+          name="included"
+          value={included}
+          style={controlStyle}
+          onChange={(event) => {
+            const nextIncluded = event.target.value;
+            setIncluded(nextIncluded);
+
+            if (nextIncluded !== 'SI') {
+              setHospitalStatus('');
+            }
+          }}
+        >
+          <option value="">Todos</option>
+          <option value="SI">Sí</option>
+          <option value="NO">No</option>
+        </select>
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">Estado en hospital</small>
+        <select
+          name="hospitalStatus"
+          value={hospitalStatus}
+          style={controlStyle}
+          disabled={included !== 'SI'}
+          onChange={(event) => setHospitalStatus(event.target.value)}
+        >
+          <option value="">Todos los estados</option>
+          <option value="ACTIVO">Activo</option>
+          <option value="INACTIVO">Inactivo</option>
+          <option value="LAB">LAB</option>
+          <option value="OTROS">Otros estados</option>
+        </select>
+      </label>
+
+      <label style={fieldStyle}>
+        <small className="muted">BIFIMED</small>
+        <select name="bifimed" defaultValue={props.bifimed} style={controlStyle}>
+          <option value="">Todos</option>
+          <option value="FINANCIADO">Financiado</option>
+          <option value="NO_FINANCIADO">No financiado</option>
+          <option value="EN_ESTUDIO">En estudio</option>
+        </select>
+      </label>
+
+      <div className="actions-row" style={{ marginTop: 0, alignSelf: 'end' }}>
+        <button type="submit" className="primary-button">
+          Aplicar filtros
+        </button>
+        <Link className="secondary-button" href="/catalogo">
+          Limpiar
+        </Link>
+      </div>
+    </form>
+  );
+}

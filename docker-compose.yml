@@ -1,0 +1,62 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: integramedcum-app
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      AUTH_SECRET: ${AUTH_SECRET}
+      AUTH_URL: ${AUTH_URL}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      CRON_SECRET: ${CRON_SECRET}
+      NOMENCLATOR_ZIP_URL: ${NOMENCLATOR_ZIP_URL}
+      NOMENCLATOR_XML_PATH: ${NOMENCLATOR_XML_PATH}
+      NOMENCLATOR_TEMP_DIR: ${NOMENCLATOR_TEMP_DIR}
+      MAIL_FROM: ${MAIL_FROM}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      NODE_ENV: production
+      PORT: 3000
+    expose:
+      - "3000"
+    volumes:
+      - sqlite_data:/data
+      - app_tmp:/app/tmp
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: integramedcum-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  proxy:
+    image: caddy:2-alpine
+    container_name: integramedcum-proxy
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  sqlite_data:
+  postgres_data:
+  app_tmp:
+  caddy_data:
+  caddy_config:

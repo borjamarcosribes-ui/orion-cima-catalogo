@@ -1,147 +1,159 @@
-# orion-cima-catalogo
-# Catálogo operativo de Farmacia desde Orion + CIMA
+# Integramécum
 
-## Objetivo
+Aplicación operativa para Farmacia Hospitalaria que unifica catálogo local Orion/TSV, nomenclátor, CIMA, BIFIMED, monitor de suministro y automatización de jobs.
 
-Construir una web app interna para Farmacia Hospitalaria que permita cargar manualmente exportaciones de Orion Logis, filtrar solo medicamentos reales, extraer su Código Nacional (CN), guardar cada carga como un snapshot histórico y enriquecer los medicamentos con información oficial de CIMA, incluyendo problemas de suministro.
+## Estado actual
 
-La app NO trabajará inicialmente con la GFT formal, porque no está actualizada. El núcleo funcional será un catálogo operativo construido a partir de productos activos exportados desde Orion Logis.
+La aplicación ya está operativa en entorno local con:
 
-## Regla principal de negocio
+- catálogo integrado por CN
+- detalle de producto
+- importación manual de catálogo Orion en `.tsv`
+- monitor de problemas de suministro
+- actualización manual y automática del nomenclátor
+- caché local de CIMA
+- caché local de BIFIMED
+- panel de automatización con histórico de ejecuciones
+- notificaciones diarias por email
+- autenticación local con roles
 
-En Orion Logis, los medicamentos vienen identificados con un código con esta estructura exacta:
+## Stack
 
-`XXXXXX.CNA`
+- Next.js 15
+- React 19
+- TypeScript
+- Prisma
+- SQLite en local
+- NextAuth/Auth.js con credenciales locales
+- Vitest
 
-donde `XXXXXX` son los 6 dígitos del Código Nacional.
+## Módulos principales
 
-### Regla de validación
-Solo se considerarán medicamentos válidos las filas cuyo código cumpla exactamente esta expresión regular:
+### 1. Importaciones Orion
 
-`^\d{6}\.CNA$`
+Ruta: `/importaciones`
 
-### Consecuencias
-- Si una fila cumple el patrón, se considera medicamento válido.
-- El CN utilizable será solo los 6 dígitos anteriores a `.CNA`.
-- Todo lo que no cumpla ese patrón debe descartarse automáticamente.
-- Los registros sin `.CNA` se consideran productos no medicamentosos y quedan fuera del catálogo.
+Permite:
 
-## Flujo funcional previsto
+- cargar un fichero `.tsv` exportado desde Orion Logis
+- parsear y validar el contenido
+- mostrar warnings y errores
+- previsualizar los artículos válidos
+- guardar la importación en base de datos
+- consultar el histórico de importaciones
 
-1. Subida manual de fichero XLS/XLSX exportado desde Orion Logis.
-2. Lectura de filas del Excel.
-3. Identificación de la columna del código Orion.
-4. Aplicación de la regla `^\d{6}\.CNA$`.
-5. Extracción del CN.
-6. Descarte de filas no válidas.
-7. Guardado de la importación como snapshot histórico.
-8. Comparación contra la importación anterior.
-9. Enriquecimiento de los CN válidos con información de CIMA.
-10. Visualización del catálogo operativo y de incidencias de suministro.
+La importación de TSV actualiza la base operativa local y alimenta el universo de medicamentos vigilados.
 
-## Fuentes de datos
+### 2. Catálogo integrado
 
-### Fuente principal local
-- Exportaciones manuales de Orion Logis en formato XLS/XLSX.
+Rutas:
 
-### Fuente externa oficial
-- CIMA, como fuente oficial externa para:
-  - nombre oficial
-  - principio activo
-  - ATC
-  - laboratorio
-  - estado/comercialización si aplica
-  - VMP / VMPP si aplica
-  - problemas de suministro
+- `/catalogo`
+- `/catalogo/[cn]`
 
-## Alcance inicial (MVP)
+Permite:
 
-La primera versión debe incluir:
+- buscar por CN, nombre, principio activo, laboratorio y ATC
+- cruzar información de nomenclátor, CIMA, BIFIMED y Orion
+- ver si un CN está incluido en el hospital
+- ver el estado hospitalario real según Orion
+- abrir la ficha de detalle de cada CN
 
-- carga manual de XLS/XLSX
-- filtrado de medicamentos por patrón `XXXXXX.CNA`
-- extracción del CN
-- almacenamiento por snapshots
-- comparación entre cargas
-- enriquecimiento con CIMA
-- visualización de incidencias de suministro
-- interfaz clara para escritorio y móvil
+### 3. Suministro
 
-## Arquitectura deseada
+Ruta: `/suministro`
 
-Se busca una app web moderna, mantenible y rápida.
+Permite:
 
-Preferencias:
-- frontend: React o Next.js
-- backend: API routes / serverless / edge functions
-- base de datos: PostgreSQL o Supabase
-- autenticación simple
-- diseño responsive
-- posibilidad futura de PWA
+- consultar roturas activas
+- revisar eventos recientes
+- ver el resumen del último monitor
+- exportar incidencias a CSV
+- consultar alternativas equivalentes
+- ejecutar manualmente:
+  - monitor AEMPS/CIMA
+  - actualización de nomenclátor
 
-## Enfoque de integración con CIMA
+### 4. Automatización
 
-La API de CIMA será la fuente externa de verdad.
+Ruta: `/automatizacion`
 
-No se desea depender de llamadas en vivo para pintar tablas completas si eso degrada el rendimiento.
+Permite:
 
-Se prefiere una estrategia híbrida:
-- persistencia o caché local para búsquedas, filtros, histórico y cruces
-- consultas puntuales en vivo solo cuando tenga sentido
+- ver histórico de jobs
+- ver locks activos
+- revisar ejecuciones recientes
+- gestionar suscripciones de email
+- consultar últimos envíos de notificaciones
 
-## Modelo conceptual de datos
+### 5. Dashboard
 
-### import_batches
-Una fila por cada importación de Orion.
+Ruta: `/`
 
-### raw_import_rows
-Cada fila del Excel tal como se ha cargado, incluyendo si fue válida o descartada.
+Muestra una visión general del estado operativo:
 
-### medicines_snapshot
-Medicamentos válidos detectados en una importación concreta.
+- número de productos incluidos
+- roturas activas
+- métricas por estado hospitalario
+- antigüedad media de incidencias
+- productos con más tiempo en rotura
 
-### medicines_master
-Catálogo consolidado por CN a lo largo del tiempo.
+## Autenticación y permisos
 
-### cima_cache
-Información enriquecida obtenida de CIMA.
+La aplicación usa autenticación local con usuarios almacenados en base de datos.
 
-### supply_alerts
-Incidencias de suministro detectadas para CN concretos.
+### Rutas públicas
 
-### local_annotations
-Notas, criticidad y observaciones locales del servicio.
+- `/login`
+- `/api/auth/*`
+- `/api/jobs/*`
 
-## Vistas previstas
+### Roles
 
-- Dashboard
-- Importaciones
-- Catálogo operativo
-- Detalle del medicamento
-- Cambios entre cargas
-- Administración / validación
+#### LECTURA
 
-## Estado actual del proyecto
+Puede:
 
-Pendiente de confirmar con el fichero real de Orion:
-- nombres exactos de las columnas
-- estructura exacta del XLS/XLSX
-- posibles excepciones de formato
-- campos adicionales útiles para conservar
+- iniciar sesión
+- consultar dashboard
+- consultar catálogo y detalle
+- consultar suministro
+- consultar automatización
+- importar y guardar ficheros `.tsv` de Orion
 
-## Criterios de diseño
+No puede:
 
-- No usar Power Apps
-- No asumir una GFT formal actualizada
-- No inventar aún columnas definitivas del Excel
-- No exponer secretos en frontend
-- Mantener el código limpio y modular
-- Diseñar el importador con mapeo configurable de columnas
+- ejecutar manualmente el monitor de suministro
+- ejecutar manualmente la actualización de nomenclátor
+- gestionar suscripciones de automatización
 
-## Próximo paso
+#### ADMIN
 
-Cuando se disponga del XLS real de Orion:
-- cerrar el parser
-- fijar el mapeo de columnas
-- validar casos reales
-- afinar reglas de importación
+Puede hacer todo lo anterior y además:
+
+- ejecutar monitor manual
+- ejecutar actualización manual del nomenclátor
+- crear, activar, desactivar y eliminar suscripciones de email
+
+## Reglas funcionales relevantes
+
+- La unidad principal del catálogo es el CN.
+- “Incluido en hospital” = Sí si el CN aparece en Orion/TSV.
+- El “Estado hospitalario” se muestra tal cual venga de Orion.
+- El código Orion no se muestra en el listado del catálogo, pero sí en la ficha detallada.
+- BIFIMED en listado se muestra como resumen corto.
+- La ficha detallada del producto vive en `/catalogo/[cn]`.
+
+## Estructura del proyecto
+
+```txt
+app/                 Rutas App Router y UI principal
+app/api/jobs/        Endpoints protegidos para jobs programados
+components/          Componentes compartidos
+lib/                 Lógica de negocio, integración, auth, jobs y utilidades
+prisma/              Schema Prisma
+scripts/             Scripts de backfill y utilidades manuales
+tests/               Tests del parser/importador
+types/               Extensiones de tipos
+auth.ts              Configuración central de Auth.js
+middleware.ts        Protección de rutas

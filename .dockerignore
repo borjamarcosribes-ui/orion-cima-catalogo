@@ -1,0 +1,17 @@
+.git
+.gitignore
+.next
+node_modules
+npm-debug.log
+Dockerfile*
+docker-compose*.yml
+.env
+.env.local
+.env.production
+.env.production.local
+dev.db
+dev.db-journal
+tmp
+coverage
+.vscode
+*.patch
