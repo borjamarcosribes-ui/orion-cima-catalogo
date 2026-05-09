@@ -106,6 +106,24 @@ function bifimedBadge(status: string | null): { label: string; className: string
   return { label: 'Sin dato BIFIMED', className: 'badge' };
 }
 
+function hospitalIncludedBadge(included: boolean): { label: string; className: string } {
+  return included
+    ? { label: 'Incluido en hospital', className: 'badge primary' }
+    : { label: 'No incluido en hospital', className: 'badge' };
+}
+
+function commercializedFilterLabel(status: string | undefined): string {
+  if (status === 'COMERCIALIZADO') {
+    return 'Comercializado';
+  }
+
+  if (status === 'NO_COMERCIALIZADO') {
+    return 'No comercializado';
+  }
+
+  return 'Todos';
+}
+
 function commercializationBadge(status: string): { label: string; className: string } {
   if (status === 'COMERCIALIZADO') {
     return { label: 'Comercializado', className: 'badge success' };
@@ -157,11 +175,76 @@ export default async function CatalogPage({ searchParams }: PageProps) {
 
   return (
     <div className="grid" style={{ gap: 24 }}>
+      <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div
+          style={{
+            display: 'grid',
+            gap: 22,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+            alignItems: 'stretch',
+          }}
+        >
+          <div style={{ padding: 28 }}>
+            <div className="section-title" style={{ alignItems: 'flex-start', marginBottom: 12 }}>
+              <div>
+                <span className="badge primary">Catálogo operativo</span>
+                <h1 style={{ marginTop: 12 }}>Catálogo operativo por CN</h1>
+              </div>
+              <span className="badge success">CN como unidad principal</span>
+            </div>
+
+            <p className="muted" style={{ maxWidth: 780, marginBottom: 10 }}>
+              Listado operativo que cruza el catálogo local detectado en Orion/TSV con información disponible en CIMA,
+              BIFIMED y nomenclátor, manteniendo el Código Nacional como referencia principal.
+            </p>
+            <p className="muted" style={{ maxWidth: 780, margin: 0 }}>
+              Los datos externos se muestran únicamente cuando existen en caché local; la ficha detallada se abre desde
+              cada resultado por CN.
+            </p>
+
+            <div className="kpi-row" aria-label="Resumen de resultados del catálogo">
+              <div className="kpi-chip" style={{ background: 'var(--surface-alt)', borderColor: 'var(--border)' }}>
+                <div className="muted">Resultados totales</div>
+                <strong>{data.total.toLocaleString('es-ES')}</strong>
+              </div>
+              <div className="kpi-chip" style={{ background: 'var(--surface-alt)', borderColor: 'var(--border)' }}>
+                <div className="muted">Página actual</div>
+                <strong>{data.page.toLocaleString('es-ES')}</strong>
+              </div>
+              <div className="kpi-chip" style={{ background: 'var(--surface-alt)', borderColor: 'var(--border)' }}>
+                <div className="muted">Filtro comercializado</div>
+                <strong>{commercializedFilterLabel(filters.commercializationStatus)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <aside style={{ borderLeft: '1px solid var(--border)', background: 'var(--surface-alt)', padding: 24 }}>
+            <h2 style={{ marginTop: 0 }}>Lectura del listado</h2>
+            <p className="muted" style={{ marginTop: -4 }}>
+              Cada tarjeta resume un CN: disponibilidad, comercialización, financiación BIFIMED e inclusión local en el
+              hospital.
+            </p>
+            <div className="actions-row">
+              <span className="badge primary">Resultados: {data.total.toLocaleString('es-ES')}</span>
+              <span className="badge primary">Página {data.page.toLocaleString('es-ES')}</span>
+              <span className="badge success">
+                Comercializado: {commercializedFilterLabel(filters.commercializationStatus)}
+              </span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
       <section className="card">
         <div className="section-title">
           <div>
-            <h1>Buscador CIMA Integrada con Bifimed y Orion Logis</h1>
+            <h2>Filtros de búsqueda</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Acota por nombre, principio activo, CN, laboratorio, ATC, comercialización, inclusión hospitalaria o
+              financiación BIFIMED. Por defecto se listan medicamentos comercializados.
+            </p>
           </div>
+          <span className="badge primary">Búsqueda configurable</span>
         </div>
 
         <CatalogFiltersForm
@@ -178,15 +261,25 @@ export default async function CatalogPage({ searchParams }: PageProps) {
       </section>
 
       <section className="grid" style={{ gap: 14 }}>
-        <p className="muted">Resultados: {data.total}</p>
-        <p className="muted">
+        <div className="section-title">
+          <div>
+            <h2>Resultados del catálogo</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              {data.total.toLocaleString('es-ES')} resultado{data.total === 1 ? '' : 's'} para los filtros actuales.
+            </p>
+          </div>
+          <span className="badge primary">Página {data.page.toLocaleString('es-ES')}</span>
+        </div>
+
+        <p className="muted" style={{ margin: 0 }}>
           Si no hay datos cargados en caché local de BIFIMED o documentos CIMA, se mostrará “Sin dato” o “En
-          estudio”.
+          estudio” sin completar información no disponible.
         </p>
 
         {data.rows.map((medicine) => {
           const financing = bifimedBadge(medicine.bifimedFundingStatus);
           const commercialization = commercializationBadge(medicine.commercializationStatus);
+          const hospitalIncluded = hospitalIncludedBadge(medicine.includedInHospital);
 
           return (
             <Link
@@ -195,12 +288,15 @@ export default async function CatalogPage({ searchParams }: PageProps) {
               className="card"
               style={{ textDecoration: 'none', color: 'inherit' }}
             >
-              <div className="section-title">
+              <div className="section-title" style={{ alignItems: 'flex-start' }}>
                 <div>
-                  <h2 style={{ marginBottom: 4 }}>{medicine.displayName}</h2>
-                  <div className="muted">CN {medicine.cn}</div>
+                  <span className="badge primary">CN {medicine.cn}</span>
+                  <h2 style={{ marginBottom: 4, marginTop: 10 }}>{medicine.displayName}</h2>
+                  <p className="muted" style={{ margin: 0 }}>
+                    {medicine.presentation}
+                  </p>
                 </div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {medicine.hasActiveSupplyIssue ? (
                     <span
                       className="badge danger"
@@ -208,34 +304,37 @@ export default async function CatalogPage({ searchParams }: PageProps) {
                     >
                       Problema de suministro
                     </span>
-                  ) : null}
+                  ) : (
+                    <span className="badge success">Sin rotura activa</span>
+                  )}
                   <span className={commercialization.className}>{commercialization.label}</span>
                   <span className={financing.className}>{financing.label}</span>
+                  <span className={hospitalIncluded.className}>{hospitalIncluded.label}</span>
                 </div>
               </div>
 
-              <div className="grid cols-3" style={{ gap: 10 }}>
-                <div>
+              <div className="grid cols-3" style={{ gap: 14 }}>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <small className="muted">Principio activo</small>
                   <div>{medicine.activeIngredient ?? 'Sin dato CIMA'}</div>
                 </div>
-                <div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <small className="muted">Laboratorio</small>
                   <div>{medicine.laboratory ?? 'Sin dato CIMA'}</div>
                 </div>
-                <div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <small className="muted">ATC</small>
                   <div>{medicine.atcCode ?? 'Sin dato CIMA'}</div>
                 </div>
-                <div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <small className="muted">Incluido en hospital</small>
                   <div>{formatBool(medicine.includedInHospital)}</div>
                 </div>
-                <div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <small className="muted">Estado hospitalario</small>
                   <div>{medicine.hospitalStatusOriginal ?? 'No detectado en Orion'}</div>
                 </div>
-                <div>
+                <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                   <small className="muted">Descripción local</small>
                   <div>{medicine.hospitalDescription ?? 'Sin descripción local'}</div>
                 </div>
@@ -245,20 +344,35 @@ export default async function CatalogPage({ searchParams }: PageProps) {
         })}
 
         {data.rows.length === 0 && (
-          <article className="card">
-            <p>No hay resultados con los filtros aplicados.</p>
+          <article className="card empty-state">
+            <span className="badge warning">Sin resultados</span>
+            <h2>No hay medicamentos que coincidan con los filtros aplicados.</h2>
+            <p className="muted" style={{ maxWidth: 720, margin: '0 auto' }}>
+              Revisa los criterios de búsqueda, cambia el filtro de comercialización o comprueba si las cachés locales de
+              CIMA/BIFIMED y las cargas Orion/TSV tienen datos disponibles para el CN buscado.
+            </p>
           </article>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Link className="secondary-button" href={`/catalogo?${previousParams}`} aria-disabled={data.page <= 1}>
-            Página anterior
-          </Link>
-          <span className="muted">Página {data.page}</span>
-          <Link className="secondary-button" href={`/catalogo?${nextParams}`}>
-            Página siguiente
-          </Link>
-        </div>
+        <nav className="card" aria-label="Paginación del catálogo">
+          <div className="section-title" style={{ marginBottom: 0 }}>
+            <Link
+              className="secondary-button"
+              href={`/catalogo?${previousParams}`}
+              aria-disabled={data.page <= 1}
+              style={data.page <= 1 ? { opacity: 0.55 } : undefined}
+            >
+              Página anterior
+            </Link>
+            <span className="muted">
+              Página {data.page.toLocaleString('es-ES')} · {data.total.toLocaleString('es-ES')} resultado
+              {data.total === 1 ? '' : 's'}
+            </span>
+            <Link className="secondary-button" href={`/catalogo?${nextParams}`}>
+              Página siguiente
+            </Link>
+          </div>
+        </nav>
       </section>
     </div>
   );
