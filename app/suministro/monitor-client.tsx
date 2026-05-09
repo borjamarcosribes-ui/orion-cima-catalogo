@@ -168,6 +168,21 @@ function normalizeSearchValue(value: string): string {
   return value.trim().toLocaleLowerCase('es');
 }
 
+function getRunStatusBadgeClass(status: string | null | undefined): string {
+  switch (status) {
+    case 'completed':
+      return 'success';
+    case 'completed_with_errors':
+    case 'skipped_locked':
+    case 'running':
+      return 'warning';
+    case 'failed':
+      return 'danger';
+    default:
+      return 'primary';
+  }
+}
+
 export default function MonitorClient({
   overview,
   activeIssues,
@@ -371,70 +386,156 @@ export default function MonitorClient({
 
   return (
     <div className="grid" style={{ gap: 24 }}>
+      <section
+        className="card"
+        style={{
+          display: 'grid',
+          gap: 20,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            background: 'linear-gradient(135deg, rgba(15, 107, 143, 0.16), rgba(8, 122, 85, 0.06))',
+            borderRadius: 999,
+            height: 180,
+            position: 'absolute',
+            right: -70,
+            top: -110,
+            width: 180,
+          }}
+        />
+        <div className="section-title" style={{ alignItems: 'flex-start', gap: 18, marginBottom: 0, position: 'relative' }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <span className="badge primary" style={{ width: 'fit-content' }}>Suministro</span>
+            <div>
+              <h1 style={{ letterSpacing: '-0.04em', lineHeight: 1.05, margin: 0 }}>Monitor operativo de suministro</h1>
+              <p className="muted" style={{ margin: '10px 0 0', maxWidth: 760 }}>
+                Esta vista monitoriza los medicamentos vigilables ya conocidos por la app. El TSV solo refresca el universo de
+                productos vigilados; la vigilancia sigue funcionando sobre los CN ya guardados.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end' }}>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Productos vigilados</small>
+              <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{overview.watchedProducts}</div>
+            </div>
+            <div
+              style={{
+                background: overview.activeIssues > 0 ? '#fff8e7' : 'var(--surface-alt)',
+                border: `1px solid ${overview.activeIssues > 0 ? 'rgba(154, 103, 0, 0.24)' : 'var(--border)'}`,
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">CN con rotura activa</small>
+              <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{overview.activeIssues}</div>
+            </div>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 170,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Última ejecución</small>
+              <div style={{ color: '#0b2337', fontSize: '1.1rem', fontWeight: 850, marginTop: 4 }}>
+                {overview.latestRun ? formatDateTime(overview.latestRun.finishedAt ?? overview.latestRun.startedAt) : '—'}
+              </div>
+            </div>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Estado último run</small>
+              <div style={{ marginTop: 8 }}>
+                <span className={`badge ${getRunStatusBadgeClass(overview.latestRun?.status)}`}>
+                  {overview.latestRun?.status ?? 'sin runs'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="grid cols-2">
         <article className="card">
-          <div className="section-title">
+          <div className="section-title" style={{ alignItems: 'flex-start' }}>
             <div>
-              <div className="badge primary">Suministro</div>
-              <h1>Monitor AEMPS / CIMA</h1>
+              <div className="badge primary">Monitor AEMPS / CIMA</div>
+              <h2 style={{ marginBottom: 0 }}>Consulta de roturas por CN</h2>
+              <p className="muted" style={{ margin: '6px 0 0' }}>
+                Ejecuta la vigilancia contra CIMA y registra cambios de suministro sobre los productos vigilados.
+              </p>
             </div>
             <span className="badge success">Consulta manual por CN</span>
           </div>
-          <p className="muted">
-            Esta vista monitoriza los medicamentos vigilables ya conocidos por la app. El TSV solo refresca el universo de
-            productos vigilados; la vigilancia sigue funcionando sobre los CN ya guardados.
-          </p>
-          <div className="actions-row">
-            <button
-              className="primary-button"
-              disabled={!canManageManualActions || isMonitorRunning}
-              onClick={handleRunMonitor}
-              style={
-                isMonitorRunning
-                  ? {
-                      opacity: 0.72,
-                      background: '#6f89c9',
-                      transform: 'scale(0.985)',
-                      boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
-                    }
-                  : undefined
-              }
-              type="button"
-            >
-              {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
-            </button>
-            <span className="muted">
-              El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
-              abortar todo el run.
-            </span>
+          <div className="inline-panel">
+            <div className="actions-row" style={{ marginTop: 0 }}>
+              <button
+                className="primary-button"
+                disabled={!canManageManualActions || isMonitorRunning}
+                onClick={handleRunMonitor}
+                style={
+                  isMonitorRunning
+                    ? {
+                        opacity: 0.72,
+                        background: '#6f89c9',
+                        transform: 'scale(0.985)',
+                        boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
+                      }
+                    : undefined
+                }
+                type="button"
+              >
+                {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
+              </button>
+              <span className="muted">
+                El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
+                abortar todo el run.
+              </span>
+            </div>
+            {monitorMessage ? <p className="muted" style={{ marginBottom: 0 }}>{monitorMessage}</p> : null}
           </div>
-          {monitorMessage ? <p className="muted">{monitorMessage}</p> : null}
 
           {overview.latestRun ? (
             <div className="grid cols-2" style={{ gap: 12, marginTop: 18 }}>
-              <div className="list compact-list">
-                <li>
-                  <strong>Inicio</strong>
-                  <div className="muted">{formatDateTime(overview.latestRun.startedAt)}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Inicio</strong>
+                <div className="muted">{formatDateTime(overview.latestRun.startedAt)}</div>
               </div>
-              <div className="list compact-list">
-                <li>
-                  <strong>Fin</strong>
-                  <div className="muted">{formatDateTime(overview.latestRun.finishedAt)}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Fin</strong>
+                <div className="muted">{formatDateTime(overview.latestRun.finishedAt)}</div>
               </div>
-              <div className="list compact-list">
-                <li>
-                  <strong>Estado</strong>
-                  <div className="muted">{overview.latestRun.status}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Estado</strong>
+                <div style={{ marginTop: 6 }}>
+                  <span className={`badge ${getRunStatusBadgeClass(overview.latestRun.status)}`}>{overview.latestRun.status}</span>
+                </div>
               </div>
-              <div className="list compact-list">
-                <li>
-                  <strong>Roturas activas</strong>
-                  <div className="muted">{overview.latestRun.activeIssues}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Roturas activas</strong>
+                <div className="muted">{overview.latestRun.activeIssues}</div>
               </div>
             </div>
           ) : (
@@ -445,38 +546,40 @@ export default function MonitorClient({
         </article>
 
         <article className="card">
-          <div className="section-title">
+          <div className="section-title" style={{ alignItems: 'flex-start' }}>
             <div>
-              <div className="badge primary">Nomenclátor</div>
-              <h1>Nomenclátor de prescripción</h1>
+              <div className="badge primary">Nomenclátor de prescripción</div>
+              <h2 style={{ marginBottom: 0 }}>Base local de equivalencias</h2>
+              <p className="muted" style={{ margin: '6px 0 0' }}>
+                Actualiza la base local de especialidades equivalentes desde el fichero de Nomenclátor disponible en disco.
+              </p>
             </div>
             <span className="badge success">Actualización manual</span>
           </div>
-          <p className="muted">
-            Actualiza la base local de especialidades equivalentes desde el fichero de Nomenclátor disponible en disco.
-          </p>
-          <div className="actions-row">
-            <button
-              className="primary-button"
-              disabled={!canManageManualActions || isNomenclatorRunning}
-              onClick={handleRunNomenclatorUpdate}
-              style={
-                isNomenclatorRunning
-                  ? {
-                      opacity: 0.72,
-                      background: '#6f89c9',
-                      transform: 'scale(0.985)',
-                      boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
-                    }
-                  : undefined
-              }
-              type="button"
-            >
-              {isNomenclatorRunning ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
-            </button>
-            <span className="muted">Importa el XML local configurado y refresca el resumen operativo al terminar.</span>
+          <div className="inline-panel">
+            <div className="actions-row" style={{ marginTop: 0 }}>
+              <button
+                className="primary-button"
+                disabled={!canManageManualActions || isNomenclatorRunning}
+                onClick={handleRunNomenclatorUpdate}
+                style={
+                  isNomenclatorRunning
+                    ? {
+                        opacity: 0.72,
+                        background: '#6f89c9',
+                        transform: 'scale(0.985)',
+                        boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
+                      }
+                    : undefined
+                }
+                type="button"
+              >
+                {isNomenclatorRunning ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
+              </button>
+              <span className="muted">Importa el XML local configurado y refresca el resumen operativo al terminar.</span>
+            </div>
+            {nomenclatorMessage ? <p className="muted" style={{ marginBottom: 0 }}>{nomenclatorMessage}</p> : null}
           </div>
-          {nomenclatorMessage ? <p className="muted">{nomenclatorMessage}</p> : null}
           {latestNomenclatorRun ? (
             <ul className="list compact-list" style={{ marginTop: 18 }}>
               <li>
@@ -487,7 +590,11 @@ export default function MonitorClient({
               </li>
               <li>
                 <strong>Estado</strong>
-                <div className="muted">{latestNomenclatorRun.status}</div>
+                <div style={{ marginTop: 6 }}>
+                  <span className={`badge ${getRunStatusBadgeClass(latestNomenclatorRun.status)}`}>
+                    {latestNomenclatorRun.status}
+                  </span>
+                </div>
               </li>
               <li>
                 <strong>Productos procesados</strong>
@@ -510,63 +617,40 @@ export default function MonitorClient({
         </article>
       </section>
 
-      <section className="grid cols-3">
-        <article className="card">
-          <div className="badge primary">Productos vigilados</div>
-          <div className="metric">{overview.watchedProducts}</div>
-          <div className="muted">Medicamentos vigilables derivados de Orion con código exacto XXXXXX.CNA.</div>
-        </article>
-        <article className="card">
-          <div className="badge warning">CN con rotura activa</div>
-          <div className="metric">{overview.activeIssues}</div>
-          <div className="muted">Estado actual conocido tras la última consulta realizada.</div>
-        </article>
-        <article className="card">
-          <div className="badge success">Última ejecución</div>
-          <div className="metric">
-            {overview.latestRun ? formatDateTime(overview.latestRun.finishedAt ?? overview.latestRun.startedAt) : '—'}
-          </div>
-          <div className="muted">Último run del monitor guardado en la base local.</div>
-        </article>
-      </section>
-
       <section className="card">
-        <div className="section-title">
-          <h2>Resumen del último run</h2>
-          <span className="badge primary">{overview.latestRun?.status ?? 'sin runs'}</span>
+        <div className="section-title" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ marginBottom: 0 }}>Resumen del último run</h2>
+            <p className="muted" style={{ margin: '6px 0 0' }}>
+              Lectura rápida de resultados del último ciclo de monitorización guardado.
+            </p>
+          </div>
+          <span className={`badge ${getRunStatusBadgeClass(overview.latestRun?.status)}`}>
+            {overview.latestRun?.status ?? 'sin runs'}
+          </span>
         </div>
         {overview.latestRun ? (
-          <div
-            className="grid"
-            style={{
-              gap: 16,
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            }}
-          >
-            <div className="list compact-list">
-              <li>
-                <strong>Nuevas roturas</strong>
-                <div className="muted">{overview.newIssues}</div>
-              </li>
-            </div>
-            <div className="list compact-list">
-              <li>
-                <strong>Roturas resueltas</strong>
-                <div className="muted">{overview.resolvedIssues}</div>
-              </li>
-            </div>
-            <div className="list compact-list">
-              <li>
-                <strong>Productos revisados</strong>
-                <div className="muted">{overview.latestRun.checkedProducts}</div>
-              </li>
-            </div>
-            <div className="list compact-list">
-              <li>
-                <strong>Cambios detectados</strong>
-                <div className="muted">{overview.latestRun.changedProducts}</div>
-              </li>
-            </div>
+          <div className="grid cols-4" style={{ gap: 12 }}>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge warning">Nuevas roturas</div>
+              <div className="metric">{overview.newIssues}</div>
+              <div className="muted">Altas detectadas durante el run.</div>
+            </article>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge success">Roturas resueltas</div>
+              <div className="metric">{overview.resolvedIssues}</div>
+              <div className="muted">Alertas cerradas tras la consulta.</div>
+            </article>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge primary">Productos revisados</div>
+              <div className="metric">{overview.latestRun.checkedProducts}</div>
+              <div className="muted">CN evaluados por el monitor.</div>
+            </article>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge primary">Cambios detectados</div>
+              <div className="metric">{overview.latestRun.changedProducts}</div>
+              <div className="muted">Productos con variación registrada.</div>
+            </article>
           </div>
         ) : (
           <p className="muted">Todavía no se ha ejecutado el monitor.</p>
@@ -574,231 +658,325 @@ export default function MonitorClient({
       </section>
 
       <section className="card">
-        <div className="section-title">
-          <h2>Roturas activas</h2>
-          <span className="badge warning">{sortedActiveIssues.length}</span>
+        <div className="section-title" style={{ alignItems: 'flex-start', marginBottom: 18 }}>
+          <div>
+            <span className="badge warning" style={{ width: 'fit-content' }}>Seguimiento activo</span>
+            <h2 style={{ margin: '8px 0 0' }}>Roturas activas</h2>
+            <p className="muted" style={{ margin: '8px 0 0', maxWidth: 760 }}>
+              Lista operativa de CN con rotura persistida y filtrado local para priorizar revisión por estado hospitalario,
+              CN, descripción o principio activo.
+            </p>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end' }}>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Visibles</small>
+              <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{sortedActiveIssues.length}</div>
+            </div>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Persistidas</small>
+              <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{activeIssues.length}</div>
+            </div>
+          </div>
         </div>
         {activeIssues.length === 0 ? (
-          <p className="muted">No hay roturas activas persistidas en este momento.</p>
+          <div className="inline-panel" style={{ textAlign: 'center' }}>
+            <div className="badge success">Sin roturas activas</div>
+            <h3 style={{ margin: '10px 0 6px' }}>No hay roturas activas persistidas</h3>
+            <p className="muted" style={{ margin: 0 }}>No hay roturas activas persistidas en este momento.</p>
+          </div>
         ) : (
           <>
-            <div className="actions-row" style={{ marginBottom: 16 }}>
-              <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
-                <input checked={showActivo} onChange={(event) => setShowActivo(event.target.checked)} type="checkbox" />
-                <span>ACTIVO</span>
-              </label>
-              <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
-                <input checked={showLab} onChange={(event) => setShowLab(event.target.checked)} type="checkbox" />
-                <span>LAB</span>
-              </label>
-              <input
-                aria-label="Buscar por CN, descripción o principio activo"
-                onChange={(event) => setActiveIssueSearch(event.target.value)}
-                placeholder="Buscar por CN, descripción o principio activo"
-                style={{ maxWidth: 320 }}
-                type="text"
-                value={activeIssueSearch}
-              />
+            <div className="inline-panel" style={{ marginBottom: 16 }}>
+              <div className="section-title" style={{ alignItems: 'flex-start', marginBottom: 12 }}>
+                <div>
+                  <h3 style={{ marginBottom: 0 }}>Filtros de revisión</h3>
+                  <p className="muted" style={{ margin: '6px 0 0' }}>
+                    Ajusta la vista sin modificar la lista persistida ni la consulta de alternativas.
+                  </p>
+                </div>
+                <span className="badge primary">{sortedActiveIssues.length} visibles</span>
+              </div>
+              <div className="actions-row" style={{ marginBottom: 0 }}>
+                <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+                  <input checked={showActivo} onChange={(event) => setShowActivo(event.target.checked)} type="checkbox" />
+                  <span>ACTIVO</span>
+                </label>
+                <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+                  <input checked={showLab} onChange={(event) => setShowLab(event.target.checked)} type="checkbox" />
+                  <span>LAB</span>
+                </label>
+                <input
+                  aria-label="Buscar por CN, descripción o principio activo"
+                  onChange={(event) => setActiveIssueSearch(event.target.value)}
+                  placeholder="Buscar por CN, descripción o principio activo"
+                  style={{ maxWidth: 320 }}
+                  type="text"
+                  value={activeIssueSearch}
+                />
+              </div>
             </div>
-            <div className="table-scroll">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>
-                      <button onClick={() => handleSort('cn')} style={sortableHeaderButtonStyle} type="button">
-                        CN{getSortIndicator('cn')}
-                      </button>
-                    </th>
-                    <th>
-                      <button onClick={() => handleSort('status')} style={sortableHeaderButtonStyle} type="button">
-                        Estado{getSortIndicator('status')}
-                      </button>
-                    </th>
-                    <th>
-                      <button
-                        onClick={() => handleSort('shortDescription')}
-                        style={sortableHeaderButtonStyle}
-                        type="button"
-                      >
-                        Descripción{getSortIndicator('shortDescription')}
-                      </button>
-                    </th>
-                    <th>
-                      <button onClick={() => handleSort('issueType')} style={sortableHeaderButtonStyle} type="button">
-                        Tipo{getSortIndicator('issueType')}
-                      </button>
-                    </th>
-                    <th>
-                      <button onClick={() => handleSort('startedAt')} style={sortableHeaderButtonStyle} type="button">
-                        Inicio{getSortIndicator('startedAt')}
-                      </button>
-                    </th>
-                    <th>
-                      <button
-                        onClick={() => handleSort('expectedEndAt')}
-                        style={sortableHeaderButtonStyle}
-                        type="button"
-                      >
-                        Fin esperado{getSortIndicator('expectedEndAt')}
-                      </button>
-                    </th>
-                    <th>Observaciones</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortedActiveIssues.map((issue) => {
-                    const panelData = alternativesByCn[issue.cn] ?? null;
-                    const visibleAlternatives = getVisibleAlternatives(issue.cn);
-                    const panelError = alternativesErrorByCn[issue.cn] ?? null;
-                    const isExpanded = expandedCn === issue.cn;
-                    const isLoadingAlternatives = loadingAlternativesCn === issue.cn;
+            {sortedActiveIssues.length === 0 ? (
+              <div className="inline-panel" style={{ textAlign: 'center' }}>
+                <div className="badge warning">Sin resultados visibles</div>
+                <h3 style={{ margin: '10px 0 6px' }}>Los filtros actuales no muestran roturas</h3>
+                <p className="muted" style={{ margin: 0 }}>
+                  Hay roturas persistidas, pero ninguna coincide con los estados o el texto de búsqueda seleccionados.
+                </p>
+              </div>
+            ) : (
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>
+                        <button onClick={() => handleSort('cn')} style={sortableHeaderButtonStyle} type="button">
+                          CN{getSortIndicator('cn')}
+                        </button>
+                      </th>
+                      <th>
+                        <button onClick={() => handleSort('status')} style={sortableHeaderButtonStyle} type="button">
+                          Estado{getSortIndicator('status')}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          onClick={() => handleSort('shortDescription')}
+                          style={sortableHeaderButtonStyle}
+                          type="button"
+                        >
+                          Descripción{getSortIndicator('shortDescription')}
+                        </button>
+                      </th>
+                      <th>
+                        <button onClick={() => handleSort('issueType')} style={sortableHeaderButtonStyle} type="button">
+                          Tipo{getSortIndicator('issueType')}
+                        </button>
+                      </th>
+                      <th>
+                        <button onClick={() => handleSort('startedAt')} style={sortableHeaderButtonStyle} type="button">
+                          Inicio{getSortIndicator('startedAt')}
+                        </button>
+                      </th>
+                      <th>
+                        <button
+                          onClick={() => handleSort('expectedEndAt')}
+                          style={sortableHeaderButtonStyle}
+                          type="button"
+                        >
+                          Fin esperado{getSortIndicator('expectedEndAt')}
+                        </button>
+                      </th>
+                      <th>Observaciones</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedActiveIssues.map((issue) => {
+                      const panelData = alternativesByCn[issue.cn] ?? null;
+                      const visibleAlternatives = getVisibleAlternatives(issue.cn);
+                      const panelError = alternativesErrorByCn[issue.cn] ?? null;
+                      const isExpanded = expandedCn === issue.cn;
+                      const isLoadingAlternatives = loadingAlternativesCn === issue.cn;
 
-                    return (
-                      <Fragment key={`${issue.cn}-${issue.articleCode}`}>
-                        <tr>
-                          <td>{issue.cn}</td>
-                          <td>{issue.status}</td>
-                          <td>{issue.shortDescription}</td>
-                          <td>{issue.issueType ?? '—'}</td>
-                          <td>{formatDateOnly(issue.startedAt)}</td>
-                          <td>{formatDateOnly(issue.expectedEndAt)}</td>
-                          <td>{issue.observations ?? '—'}</td>
-                          <td>
-                            <button className="secondary-button" onClick={() => handleToggleAlternatives(issue)} type="button">
-                              {isExpanded ? 'Ocultar alternativas' : 'Consultar alternativas'}
-                            </button>
-                          </td>
-                        </tr>
-                        {isExpanded ? (
+                      return (
+                        <Fragment key={`${issue.cn}-${issue.articleCode}`}>
                           <tr>
-                            <td colSpan={8}>
-                              <div className="inline-panel">
-                                <div className="section-title">
-                                  <div>
-                                    <h3 style={{ marginBottom: 8 }}>Alternativas equivalentes</h3>
-                                    <div className="muted">
-                                      Cruce a través de nomenclator de especialidades equivalentes (mismo principio
-                                      activo, misma dosis y misma forma farmacéutica).
-                                    </div>
-                                  </div>
-                                  <span className="badge primary">{issue.cn}</span>
-                                </div>
-
-                                {isLoadingAlternatives ? <p className="muted">Consultando alternativas…</p> : null}
-                                {panelError ? <p className="muted">{panelError}</p> : null}
-
-                                {panelData ? (
-                                  <div className="grid" style={{ gap: 16 }}>
-                                    <div className="grid cols-2" style={{ gap: 12 }}>
-                                      <div>
-                                        <strong>CN origen</strong>
-                                        <div className="muted">{panelData.sourceMedicine.cn}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Estado local</strong>
-                                        <div className="muted">{panelData.sourceMedicine.localStatus}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Descripción</strong>
-                                        <div className="muted">{panelData.sourceMedicine.shortDescription}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Tipo</strong>
-                                        <div className="muted">{panelData.sourceMedicine.issueType ?? '—'}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Inicio</strong>
-                                        <div className="muted">{formatDateOnly(panelData.sourceMedicine.startedAt)}</div>
-                                      </div>
-                                      <div>
-                                        <strong>Fin esperado</strong>
-                                        <div className="muted">
-                                          {formatDateOnly(panelData.sourceMedicine.expectedEndAt)}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <strong>Observaciones</strong>
-                                        <div className="muted">{panelData.sourceMedicine.observations ?? '—'}</div>
-                                      </div>
-                                      <div>
-                                        <strong>codDcp</strong>
-                                        <div className="muted">{panelData.sourceMedicine.codDcp ?? '—'}</div>
-                                      </div>
-                                    </div>
-
-                                    <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
-                                      <input
-                                        checked={showNonCommercialized}
-                                        onChange={(event) => setShowNonCommercialized(event.target.checked)}
-                                        type="checkbox"
-                                      />
-                                      <span>Mostrar también no comercializados</span>
-                                    </label>
-
-                                    {visibleAlternatives.length === 0 ? (
-                                      <p className="muted">No hay alternativas visibles con el filtro actual.</p>
-                                    ) : (
-                                      <div className="table-scroll">
-                                        <table className="table">
-                                          <thead>
-                                            <tr>
-                                              <th>CN</th>
-                                              <th>Presentación</th>
-                                              <th>Comercializado</th>
-                                              <th>Rotura</th>
-                                              <th>Inicio</th>
-                                              <th>Fin esperado</th>
-                                              <th>Observaciones</th>
-                                              <th>En tu hospital</th>
-                                              <th>Estado Orion</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            {visibleAlternatives.map((alternative) => (
-                                              <tr key={alternative.cn}>
-                                                <td>{alternative.cn}</td>
-                                                <td>{alternative.presentation}</td>
-                                                <td>{getCommercializationLabel(alternative.commercializationStatus)}</td>
-                                                <td>{getSupplyLabel(alternative.supplyStatus)}</td>
-                                                <td>{formatDateOnly(alternative.supplyStartedAt)}</td>
-                                                <td>{formatDateOnly(alternative.supplyExpectedEndAt)}</td>
-                                                <td>{alternative.supplyObservations ?? '—'}</td>
-                                                <td>{getHospitalPresenceLabel(alternative.hospitalPresenceStatus)}</td>
-                                                <td>
-                                                  {alternative.hospitalPresenceStatus === 'NO_PRESENTE'
-                                                    ? '—'
-                                                    : alternative.hospitalStatusNormalized ?? '—'}
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : null}
-                              </div>
+                            <td>{issue.cn}</td>
+                            <td>{issue.status}</td>
+                            <td>{issue.shortDescription}</td>
+                            <td>{issue.issueType ?? '—'}</td>
+                            <td>{formatDateOnly(issue.startedAt)}</td>
+                            <td>{formatDateOnly(issue.expectedEndAt)}</td>
+                            <td>{issue.observations ?? '—'}</td>
+                            <td>
+                              <button className="secondary-button" onClick={() => handleToggleAlternatives(issue)} type="button">
+                                {isExpanded ? 'Ocultar alternativas' : 'Consultar alternativas'}
+                              </button>
                             </td>
                           </tr>
-                        ) : null}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          {isExpanded ? (
+                            <tr>
+                              <td colSpan={8}>
+                                <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                                  <div className="section-title" style={{ alignItems: 'flex-start' }}>
+                                    <div>
+                                      <span className="badge primary" style={{ width: 'fit-content' }}>CN {issue.cn}</span>
+                                      <h3 style={{ margin: '8px 0 6px' }}>Alternativas equivalentes</h3>
+                                      <div className="muted">
+                                        Cruce a través de nomenclator de especialidades equivalentes (mismo principio
+                                        activo, misma dosis y misma forma farmacéutica).
+                                      </div>
+                                    </div>
+                                    <span className="badge primary">{visibleAlternatives.length} visibles</span>
+                                  </div>
+
+                                  {isLoadingAlternatives ? (
+                                    <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                      <strong>Consultando alternativas…</strong>
+                                      <p className="muted" style={{ margin: '6px 0 0' }}>
+                                        Se está cargando el cruce local para este CN.
+                                      </p>
+                                    </div>
+                                  ) : null}
+                                  {panelError ? (
+                                    <div className="inline-panel" style={{ background: '#fff7f6' }}>
+                                      <strong>No se pudieron cargar las alternativas</strong>
+                                      <p className="muted" style={{ margin: '6px 0 0' }}>{panelError}</p>
+                                    </div>
+                                  ) : null}
+
+                                  {panelData ? (
+                                    <div className="grid" style={{ gap: 16 }}>
+                                      <div className="grid cols-2" style={{ gap: 12 }}>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>CN origen</strong>
+                                          <div className="muted">{panelData.sourceMedicine.cn}</div>
+                                        </div>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>Estado local</strong>
+                                          <div className="muted">{panelData.sourceMedicine.localStatus}</div>
+                                        </div>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>Descripción</strong>
+                                          <div className="muted">{panelData.sourceMedicine.shortDescription}</div>
+                                        </div>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>Tipo</strong>
+                                          <div className="muted">{panelData.sourceMedicine.issueType ?? '—'}</div>
+                                        </div>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>Inicio</strong>
+                                          <div className="muted">{formatDateOnly(panelData.sourceMedicine.startedAt)}</div>
+                                        </div>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>Fin esperado</strong>
+                                          <div className="muted">
+                                            {formatDateOnly(panelData.sourceMedicine.expectedEndAt)}
+                                          </div>
+                                        </div>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>Observaciones</strong>
+                                          <div className="muted">{panelData.sourceMedicine.observations ?? '—'}</div>
+                                        </div>
+                                        <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                          <strong>codDcp</strong>
+                                          <div className="muted">{panelData.sourceMedicine.codDcp ?? '—'}</div>
+                                        </div>
+                                      </div>
+
+                                      <div className="inline-panel" style={{ background: 'var(--surface-alt)' }}>
+                                        <div className="section-title" style={{ alignItems: 'center', marginBottom: 12 }}>
+                                          <div>
+                                            <h4 style={{ margin: 0 }}>Filtro de alternativas</h4>
+                                            <p className="muted" style={{ margin: '6px 0 0' }}>
+                                              Por defecto se muestran solo alternativas comercializadas.
+                                            </p>
+                                          </div>
+                                          <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+                                            <input
+                                              checked={showNonCommercialized}
+                                              onChange={(event) => setShowNonCommercialized(event.target.checked)}
+                                              type="checkbox"
+                                            />
+                                            <span>Mostrar también no comercializados</span>
+                                          </label>
+                                        </div>
+
+                                        {visibleAlternatives.length === 0 ? (
+                                          <div className="inline-panel" style={{ background: 'var(--surface)', textAlign: 'center' }}>
+                                            <div className="badge warning">Sin alternativas visibles</div>
+                                            <p className="muted" style={{ margin: '8px 0 0' }}>
+                                              No hay alternativas visibles con el filtro actual.
+                                            </p>
+                                          </div>
+                                        ) : (
+                                          <div className="table-scroll">
+                                            <table className="table">
+                                              <thead>
+                                                <tr>
+                                                  <th>CN</th>
+                                                  <th>Presentación</th>
+                                                  <th>Comercializado</th>
+                                                  <th>Rotura</th>
+                                                  <th>Inicio</th>
+                                                  <th>Fin esperado</th>
+                                                  <th>Observaciones</th>
+                                                  <th>En tu hospital</th>
+                                                  <th>Estado Orion</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {visibleAlternatives.map((alternative) => (
+                                                  <tr key={alternative.cn}>
+                                                    <td>{alternative.cn}</td>
+                                                    <td>{alternative.presentation}</td>
+                                                    <td>{getCommercializationLabel(alternative.commercializationStatus)}</td>
+                                                    <td>{getSupplyLabel(alternative.supplyStatus)}</td>
+                                                    <td>{formatDateOnly(alternative.supplyStartedAt)}</td>
+                                                    <td>{formatDateOnly(alternative.supplyExpectedEndAt)}</td>
+                                                    <td>{alternative.supplyObservations ?? '—'}</td>
+                                                    <td>{getHospitalPresenceLabel(alternative.hospitalPresenceStatus)}</td>
+                                                    <td>
+                                                      {alternative.hospitalPresenceStatus === 'NO_PRESENTE'
+                                                        ? '—'
+                                                        : alternative.hospitalStatusNormalized ?? '—'}
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </section>
 
       <section className="card">
-        <div className="section-title">
-          <h2>Eventos recientes</h2>
+        <div className="section-title" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <span className="badge primary" style={{ width: 'fit-content' }}>Trazabilidad</span>
+            <h2 style={{ margin: '8px 0 0' }}>Eventos recientes</h2>
+            <p className="muted" style={{ margin: '8px 0 0', maxWidth: 720 }}>
+              Últimos cambios de suministro registrados por el monitor para facilitar revisión y auditoría operativa.
+            </p>
+          </div>
           <span className="badge primary">{overview.recentEvents.length}</span>
         </div>
         {overview.recentEvents.length === 0 ? (
-          <p className="muted">Todavía no hay eventos relevantes de suministro.</p>
+          <div className="inline-panel" style={{ textAlign: 'center' }}>
+            <div className="badge primary">Sin eventos</div>
+            <p className="muted" style={{ margin: '8px 0 0' }}>Todavía no hay eventos relevantes de suministro.</p>
+          </div>
         ) : (
           <div className="table-scroll">
             <table className="table">
