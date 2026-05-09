@@ -37,35 +37,15 @@ export default async function RootLayout({
     <html lang="es">
       <body>
         <header className="header">
-          <div
-            className="nav"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'flex-start',
-              gap: 8,
-            }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <strong style={{ fontSize: '1.5rem', lineHeight: 1.1 }}>
-                Integramécum
-              </strong>
-              <div className="muted">
+          <div className="nav">
+            <div className="nav-brand">
+              <strong className="nav-title">Integramécum</strong>
+              <div className="muted nav-subtitle">
                 Catálogo Integrado CIMA + BIFIMED + Orion Logis
               </div>
             </div>
 
-            <nav
-              className="nav-links"
-              aria-label="Principal"
-              style={{
-                display: 'flex',
-                flexWrap: 'nowrap',
-                gap: 16,
-                whiteSpace: 'nowrap',
-                overflowX: 'auto',
-              }}
-            >
+            <nav className="nav-links" aria-label="Principal">
               <NavLink href="/">Inicio</NavLink>
               <NavLink href="/importaciones">Importación Orion Logis</NavLink>
               <NavLink href="/catalogo">CIMA Integrada</NavLink>
@@ -77,7 +57,7 @@ export default async function RootLayout({
             </nav>
 
             {session?.user ? (
-              <div className="actions-row" style={{ marginTop: 0 }}>
+              <div className="actions-row">
                 <span className="badge primary">{role}</span>
                 <span className="muted">{session.user.email ?? ''}</span>
                 <LogoutButton />
