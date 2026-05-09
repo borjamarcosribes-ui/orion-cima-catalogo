@@ -77,17 +77,17 @@ function formatImportedAt(value: string): string {
 function ResultSummary({ result }: { result: OrionCatalogParseResult }) {
   return (
     <div className="grid cols-3">
-      <article className="card" style={{ boxShadow: 'none' }}>
+      <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
         <div className="badge primary">Filas leídas</div>
         <div className="metric">{result.rowCount}</div>
         <div className="muted">Filas de datos no vacías procesadas desde el TSV.</div>
       </article>
-      <article className="card" style={{ boxShadow: 'none' }}>
+      <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
         <div className="badge success">Items válidos</div>
         <div className="metric">{result.items.length}</div>
         <div className="muted">Items consolidados tras validación estructural y deduplicación.</div>
       </article>
-      <article className="card" style={{ boxShadow: 'none' }}>
+      <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
         <div className="badge warning">Duplicados detectados</div>
         <div className="metric">{result.duplicateCount}</div>
         <div className="muted">Duplicados idénticos o conflictivos detectados durante el parsing.</div>
@@ -108,13 +108,21 @@ function MessageList({
   tone: 'warning' | 'danger';
 }) {
   return (
-    <article className="card">
+    <article className="card" style={{ borderColor: items.length > 0 ? `var(--${tone})` : 'var(--border)' }}>
       <div className="section-title">
-        <h2>{title}</h2>
+        <div>
+          <h2>{title}</h2>
+          <p className="muted" style={{ margin: '6px 0 0' }}>
+            Revisión de incidencias detectadas durante el análisis del fichero.
+          </p>
+        </div>
         <span className={`badge ${tone}`}>{items.length}</span>
       </div>
       {items.length === 0 ? (
-        <p className="muted">{emptyMessage}</p>
+        <div className="inline-panel" style={{ background: 'var(--surface)', textAlign: 'center' }}>
+          <strong>Sin incidencias</strong>
+          <p className="muted" style={{ margin: 0 }}>{emptyMessage}</p>
+        </div>
       ) : (
         <ul className="list compact-list">
           {items.map((item, index) => (
@@ -184,11 +192,19 @@ function ImportHistory({
   return (
     <section className="card">
       <div className="section-title">
-        <h2>Histórico de importaciones</h2>
-        <span className="badge primary">{history.length}</span>
+        <div>
+          <h2>Histórico de importaciones</h2>
+          <p className="muted" style={{ margin: '8px 0 0' }}>
+            Importaciones TSV guardadas, con los mismos totales de filas, items válidos e incidencias registradas.
+          </p>
+        </div>
+        <span className="badge primary">{history.length} importaciones</span>
       </div>
       {history.length === 0 ? (
-        <p className="muted">Todavía no hay importaciones TSV guardadas.</p>
+        <div className="inline-panel" style={{ background: 'var(--surface)', textAlign: 'center' }}>
+          <strong>Sin importaciones guardadas</strong>
+          <p className="muted" style={{ margin: 0 }}>Todavía no hay importaciones TSV guardadas.</p>
+        </div>
       ) : (
         <>
           <div className="table-scroll">
@@ -372,45 +388,143 @@ export default function ImportsClient({
 
   return (
     <div className="grid" style={{ gap: 24 }}>
-      <section className="card">
-        <div className="section-title">
-          <div>
-            <div className="badge primary">Importaciones</div>
-            <h1>Importación de archivo .tsv de Orion Logis con vista previa</h1>
-          </div>
-        </div>
-        <p className="muted">
-          Sube un fichero .tsv resultante de la exportación de la Consulta de Catálogo de Artículos, en Orion Logis.
-          Revisa el resultado y guarda la importación para almacenarla en base de datos.
-        </p>
-
-        <label className="file-picker" htmlFor="orion-tsv-input">
-          <span className="badge primary">Seleccionar TSV</span>
-          <strong>{resultFileName ?? 'Ningún fichero cargado'}</strong>
-          <span className="muted">Acepta únicamente ficheros con extensión .tsv.</span>
-        </label>
-        <input
-          id="orion-tsv-input"
-          accept=".tsv,text/tab-separated-values"
-          className="sr-only"
-          onChange={handleFileChange}
-          type="file"
+      <section
+        className="card"
+        style={{
+          display: 'grid',
+          gap: 20,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            background: 'linear-gradient(135deg, rgba(15, 107, 143, 0.16), rgba(8, 122, 85, 0.06))',
+            borderRadius: 999,
+            height: 180,
+            position: 'absolute',
+            right: -70,
+            top: -110,
+            width: 180,
+          }}
         />
-
-        <div className="actions-row">
-          <button className="primary-button" disabled={!canSave} onClick={handleSaveImport} type="button">
-            {isPending ? 'Guardando…' : 'Guardar importación'}
-          </button>
-          <span className="muted">
-            {preview?.source === 'persisted'
-              ? `Vista previa cargada desde una importación guardada${preview.importedAt ? ` · ${formatImportedAt(preview.importedAt)}` : ''}.`
-              : hasErrors
-                ? 'No se puede guardar mientras existan errores de parser.'
-                : 'El guardado crea cabecera e items en transacción.'}
-          </span>
+        <div className="section-title" style={{ alignItems: 'flex-start', gap: 18, marginBottom: 0, position: 'relative' }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <span className="badge primary" style={{ width: 'fit-content' }}>Importaciones Orion</span>
+            <div>
+              <h1 style={{ letterSpacing: '-0.04em', lineHeight: 1.05, margin: 0 }}>Importación TSV con vista previa</h1>
+              <p className="muted" style={{ margin: '10px 0 0', maxWidth: 760 }}>
+                Sube un fichero .tsv resultante de la exportación de la Consulta de Catálogo de Artículos, revisa el
+                parsing y guarda la importación para almacenarla en base de datos.
+              </p>
+            </div>
+          </div>
+          {result ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end' }}>
+              <div
+                style={{
+                  background: 'var(--surface-alt)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 14,
+                  minWidth: 112,
+                  padding: '10px 12px',
+                }}
+              >
+                <div className="muted" style={{ fontSize: 12, fontWeight: 750 }}>Filas leídas</div>
+                <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{result.rowCount}</div>
+              </div>
+              <div
+                style={{
+                  background: 'var(--surface-alt)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 14,
+                  minWidth: 112,
+                  padding: '10px 12px',
+                }}
+              >
+                <div className="muted" style={{ fontSize: 12, fontWeight: 750 }}>Items válidos</div>
+                <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{result.items.length}</div>
+              </div>
+              <div
+                style={{
+                  background: result.duplicateCount > 0 ? '#fff8e7' : 'var(--surface-alt)',
+                  border: `1px solid ${result.duplicateCount > 0 ? 'rgba(154, 103, 0, 0.24)' : 'var(--border)'}`,
+                  borderRadius: 14,
+                  minWidth: 112,
+                  padding: '10px 12px',
+                }}
+              >
+                <div className="muted" style={{ fontSize: 12, fontWeight: 750 }}>Duplicados</div>
+                <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{result.duplicateCount}</div>
+              </div>
+              <div
+                style={{
+                  background: result.errors.length > 0 ? '#fff7f6' : 'var(--surface-alt)',
+                  border: `1px solid ${result.errors.length > 0 ? 'rgba(161, 42, 47, 0.22)' : 'var(--border)'}`,
+                  borderRadius: 14,
+                  minWidth: 112,
+                  padding: '10px 12px',
+                }}
+              >
+                <div className="muted" style={{ fontSize: 12, fontWeight: 750 }}>Errores</div>
+                <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{result.errors.length}</div>
+              </div>
+            </div>
+          ) : null}
         </div>
 
-        {saveMessage ? <p className="muted">{saveMessage}</p> : null}
+        <div className="inline-panel" style={{ position: 'relative' }}>
+          <div className="section-title" style={{ marginBottom: 0 }}>
+            <div>
+              <h2 style={{ marginBottom: 0 }}>1. Seleccionar TSV</h2>
+              <p className="muted" style={{ margin: '6px 0 0' }}>
+                Carga el fichero exportado de Orion para generar una vista previa local antes de guardar.
+              </p>
+            </div>
+            <span className="badge primary">{resultFileName ? 'Fichero cargado' : 'Pendiente'}</span>
+          </div>
+          <label className="file-picker" htmlFor="orion-tsv-input">
+            <span className="badge primary">Seleccionar TSV</span>
+            <strong>{resultFileName ?? 'Ningún fichero cargado'}</strong>
+            <span className="muted">Acepta únicamente ficheros con extensión .tsv.</span>
+          </label>
+          <input
+            id="orion-tsv-input"
+            accept=".tsv,text/tab-separated-values"
+            className="sr-only"
+            onChange={handleFileChange}
+            type="file"
+          />
+        </div>
+
+        <div className="inline-panel" style={{ position: 'relative' }}>
+          <div className="section-title" style={{ marginBottom: 0 }}>
+            <div>
+              <h2 style={{ marginBottom: 0 }}>2. Revisar y guardar</h2>
+              <p className="muted" style={{ margin: '6px 0 0' }}>
+                La importación solo se habilita si la vista previa local no tiene errores de parser.
+              </p>
+            </div>
+            <span className={`badge ${hasErrors ? 'danger' : result ? 'success' : 'primary'}`}>
+              {hasErrors ? 'Bloqueado por errores' : result ? 'Listo para revisar' : 'Sin vista previa'}
+            </span>
+          </div>
+          <div className="actions-row" style={{ marginTop: 0 }}>
+            <button className="primary-button" disabled={!canSave} onClick={handleSaveImport} type="button">
+              {isPending ? 'Guardando…' : 'Guardar importación'}
+            </button>
+            <span className="muted">
+              {preview?.source === 'persisted'
+                ? `Vista previa cargada desde una importación guardada${preview.importedAt ? ` · ${formatImportedAt(preview.importedAt)}` : ''}.`
+                : hasErrors
+                  ? 'No se puede guardar mientras existan errores de parser.'
+                  : 'El guardado crea cabecera e items en transacción.'}
+            </span>
+          </div>
+
+          {saveMessage ? <p className="muted" style={{ margin: 0 }}>{saveMessage}</p> : null}
+        </div>
       </section>
 
       {loadState.status === 'idle' ? (
@@ -421,13 +535,22 @@ export default function ImportsClient({
             Selecciona un fichero <small className="code-inline">.tsv</small> para ver el resumen del parsing y una
             vista previa de los items detectados.
           </p>
+          <div className="inline-panel" style={{ background: 'var(--surface)', marginTop: 12 }}>
+            <strong>Secuencia esperada</strong>
+            <p className="muted" style={{ margin: 0 }}>Seleccionar TSV → revisar warnings/errors → guardar importación.</p>
+          </div>
         </section>
       ) : null}
 
       {loadState.fileError ? (
         <section className="card error-panel">
           <div className="section-title">
-            <h2>Error al cargar el fichero</h2>
+            <div>
+              <h2>Error al cargar el fichero</h2>
+              <p className="muted" style={{ margin: '8px 0 0' }}>
+                No se ha generado vista previa. Selecciona un TSV válido para continuar.
+              </p>
+            </div>
             <span className="badge danger">Error</span>
           </div>
           <p>{loadState.fileError}</p>
@@ -438,7 +561,12 @@ export default function ImportsClient({
         <>
           <section className="card">
             <div className="section-title">
-              <h2>Resumen del fichero</h2>
+              <div>
+                <h2>Resumen del fichero</h2>
+                <p className="muted" style={{ margin: '8px 0 0' }}>
+                  Resultado agregado del parsing previo al guardado.
+                </p>
+              </div>
               <span className="badge primary">{resultFileName}</span>
             </div>
             <ResultSummary result={result} />
@@ -462,7 +590,12 @@ export default function ImportsClient({
           {hasErrors ? (
             <section className="card error-panel">
               <div className="section-title">
-                <h2>Vista previa bloqueada</h2>
+                <div>
+                  <h2>Vista previa bloqueada</h2>
+                  <p className="muted" style={{ margin: '8px 0 0' }}>
+                    Revisa la lista de errores antes de intentar guardar o visualizar los items válidos.
+                  </p>
+                </div>
                 <span className="badge danger">{result.errors.length} errores</span>
               </div>
               <p>
