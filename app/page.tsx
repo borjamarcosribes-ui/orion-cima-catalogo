@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
@@ -251,91 +253,194 @@ export default async function DashboardPage() {
 
   return (
     <div className="grid" style={{ gap: 24 }}>
+      <section className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div
+          style={{
+            display: 'grid',
+            gap: 22,
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
+            alignItems: 'stretch',
+          }}
+        >
+          <div style={{ padding: 28 }}>
+            <div className="section-title" style={{ alignItems: 'flex-start', marginBottom: 12 }}>
+              <div>
+                <span className="badge primary">Panel operativo</span>
+                <h1 style={{ marginTop: 12 }}>Dashboard de Farmacia Hospitalaria</h1>
+              </div>
+              <span className={totalActiveShortages > 0 ? 'badge danger' : 'badge success'}>
+                {totalActiveShortages > 0 ? 'Roturas activas' : 'Sin roturas activas'}
+              </span>
+            </div>
+
+            <p className="muted" style={{ maxWidth: 760, marginBottom: 10 }}>
+              Vista de control para priorizar el seguimiento del catálogo local Orion y la situación de suministro de
+              los medicamentos incluidos en el hospital.
+            </p>
+            <p className="muted" style={{ maxWidth: 760, margin: 0 }}>
+              Integra catálogo local Orion, nomenclátor, CIMA, BIFIMED y monitor de suministro sin modificar las reglas
+              de cálculo actuales.
+            </p>
+
+            <div className="kpi-row" aria-label="Resumen de estado del dashboard">
+              <div className="kpi-chip" style={{ background: 'var(--surface-alt)', borderColor: 'var(--border)' }}>
+                <div className="muted">Productos incluidos</div>
+                <strong>{totalIncluded.toLocaleString('es-ES')}</strong>
+              </div>
+              <div className="kpi-chip" style={{ background: 'var(--surface-alt)', borderColor: 'var(--border)' }}>
+                <div className="muted">Roturas activas</div>
+                <strong>{totalActiveShortages.toLocaleString('es-ES')}</strong>
+              </div>
+              <div className="kpi-chip" style={{ background: 'var(--surface-alt)', borderColor: 'var(--border)' }}>
+                <div className="muted">Incidencias 7 días</div>
+                <strong>{newIssues7d.toLocaleString('es-ES')} nuevas</strong>
+              </div>
+            </div>
+          </div>
+
+          <aside style={{ borderLeft: '1px solid var(--border)', background: 'var(--surface-alt)', padding: 24 }}>
+            <h2 style={{ marginTop: 0 }}>Accesos rápidos</h2>
+            <p className="muted" style={{ marginTop: -4 }}>
+              Entradas principales para revisar catálogo, suministro, automatizaciones e importaciones.
+            </p>
+            <div className="actions-row">
+              <Link className="primary-button" href="/catalogo">
+                Catálogo operativo
+              </Link>
+              <Link className="secondary-button" href="/suministro">
+                Suministro
+              </Link>
+              <Link className="secondary-button" href="/automatizacion">
+                Automatización
+              </Link>
+              <Link className="secondary-button" href="/importaciones">
+                Importaciones
+              </Link>
+            </div>
+          </aside>
+        </div>
+      </section>
+
       <section className="card">
         <div className="section-title">
           <div>
-            <h1>Bienvenid@ a Integramécum</h1>
+            <h2>Indicadores principales del catálogo</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Magnitudes clave para interpretar el alcance del catálogo y el impacto operativo de las roturas.
+            </p>
           </div>
+          <span className="badge primary">Resumen actual</span>
         </div>
 
-        <p className="muted" style={{ marginBottom: 10 }}>
-          Aplicación operativa para Farmacia Hospitalaria que integra catálogo local Orion, nomenclátor, CIMA,
-          BIFIMED y monitor de suministro.
-        </p>
-        <p className="muted" style={{ margin: 0 }}>
-          Esta pantalla ofrece una visión general del estado del catálogo hospitalario y de las incidencias activas de
-          suministro sobre los medicamentos incluidos en el hospital.
-        </p>
+        <div className="grid cols-3">
+          <article className="card" style={{ background: 'var(--surface-alt)' }}>
+            <div className="muted">Productos incluidos</div>
+            <div className="metric">{totalIncluded.toLocaleString('es-ES')}</div>
+            <span className="badge primary">Catálogo hospitalario</span>
+          </article>
+
+          <article className="card" style={{ background: 'var(--surface-alt)' }}>
+            <div className="muted">Roturas activas</div>
+            <div className="metric">{totalActiveShortages.toLocaleString('es-ES')}</div>
+            <span className={totalActiveShortages > 0 ? 'badge danger' : 'badge success'}>
+              {totalActiveShortages > 0 ? 'Requiere seguimiento' : 'Sin incidencias'}
+            </span>
+          </article>
+
+          <article className="card" style={{ background: 'var(--surface-alt)' }}>
+            <div className="muted">% rotura entre incluidos</div>
+            <div className="metric">{formatPercent(totalActiveShortages, totalIncluded)}</div>
+            <span className="badge primary">Sobre total incluido</span>
+          </article>
+        </div>
       </section>
 
-      <section className="grid cols-3">
+      <section className="grid cols-2" style={{ alignItems: 'start' }}>
         <article className="card">
-          <div className="muted">Productos incluidos en hospital</div>
-          <div className="metric" style={{ fontSize: '2rem' }}>
-            {totalIncluded.toLocaleString('es-ES')}
+          <div className="section-title">
+            <div>
+              <h2>Situación de suministro</h2>
+              <p className="muted" style={{ margin: '4px 0 0' }}>
+                Evolución reciente y carga acumulada de las incidencias activas.
+              </p>
+            </div>
+            <span className="badge warning">Últimos 7 días</span>
+          </div>
+
+          <div className="grid cols-2">
+            <div>
+              <div className="muted">Roturas activas</div>
+              <div className="metric" style={{ fontSize: '1.8rem' }}>
+                {totalActiveShortages.toLocaleString('es-ES')}
+              </div>
+            </div>
+            <div>
+              <div className="muted">Nuevas roturas últimos 7 días</div>
+              <div className="metric" style={{ fontSize: '1.8rem' }}>
+                {newIssues7d.toLocaleString('es-ES')}
+              </div>
+            </div>
+            <div>
+              <div className="muted">Roturas resueltas últimos 7 días</div>
+              <div className="metric" style={{ fontSize: '1.8rem' }}>
+                {resolvedIssues7d.toLocaleString('es-ES')}
+              </div>
+            </div>
+            <div>
+              <div className="muted">Antigüedad media</div>
+              <div className="metric" style={{ fontSize: '1.8rem' }}>{formatDays(averageAge)}</div>
+            </div>
           </div>
         </article>
 
         <article className="card">
-          <div className="muted">Roturas activas</div>
-          <div className="metric" style={{ fontSize: '2rem' }}>
-            {totalActiveShortages.toLocaleString('es-ES')}
+          <div className="section-title">
+            <div>
+              <h2>Estados hospitalarios</h2>
+              <p className="muted" style={{ margin: '4px 0 0' }}>
+                Distribución secundaria del catálogo incluido según estado Orion normalizado.
+              </p>
+            </div>
+            <span className="badge primary">Detalle</span>
           </div>
-        </article>
 
-        <article className="card">
-          <div className="muted">% rotura entre incluidos</div>
-          <div className="metric" style={{ fontSize: '2rem' }}>
-            {formatPercent(totalActiveShortages, totalIncluded)}
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="muted">% rotura entre ACTIVO</div>
-          <div className="metric" style={{ fontSize: '2rem' }}>
-            {formatPercent(activeStatusShortages, totalActive)}
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="muted">% rotura entre LAB</div>
-          <div className="metric" style={{ fontSize: '2rem' }}>
-            {formatPercent(labStatusShortages, totalLab)}
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="muted">Antigüedad media de incidencias activas</div>
-          <div className="metric" style={{ fontSize: '2rem' }}>{formatDays(averageAge)}</div>
-        </article>
-      </section>
-
-      <section className="grid cols-3">
-        <article className="card">
-          <div className="muted">Nuevas roturas últimos 7 días</div>
-          <div className="metric" style={{ fontSize: '1.8rem' }}>
-            {newIssues7d.toLocaleString('es-ES')}
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="muted">Roturas resueltas últimos 7 días</div>
-          <div className="metric" style={{ fontSize: '1.8rem' }}>
-            {resolvedIssues7d.toLocaleString('es-ES')}
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="muted">Productos ACTIVO en rotura</div>
-          <div className="metric" style={{ fontSize: '1.8rem' }}>
-            {activeStatusShortages.toLocaleString('es-ES')}
+          <div className="grid cols-2">
+            <div>
+              <div className="muted">ACTIVO</div>
+              <div className="metric" style={{ fontSize: '1.65rem' }}>
+                {totalActive.toLocaleString('es-ES')}
+              </div>
+            </div>
+            <div>
+              <div className="muted">LAB</div>
+              <div className="metric" style={{ fontSize: '1.65rem' }}>
+                {totalLab.toLocaleString('es-ES')}
+              </div>
+            </div>
+            <div>
+              <div className="muted">INACTIVO</div>
+              <div className="metric" style={{ fontSize: '1.65rem' }}>
+                {totalInactive.toLocaleString('es-ES')}
+              </div>
+            </div>
+            <div>
+              <div className="muted">Otros estados</div>
+              <div className="metric" style={{ fontSize: '1.65rem' }}>
+                {totalOther.toLocaleString('es-ES')}
+              </div>
+            </div>
           </div>
         </article>
       </section>
 
       <section className="card">
         <div className="section-title">
-          <h2>Productos con mayor tiempo en rotura</h2>
+          <div>
+            <h2>Productos con mayor tiempo en rotura</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Priorización operativa de incidencias activas con fecha de inicio registrada.
+            </p>
+          </div>
           <span className="badge primary">Top 10</span>
         </div>
 
@@ -367,34 +472,37 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      <section className="grid cols-2">
-        <article className="card">
-          <div className="muted">ACTIVO</div>
-          <div className="metric" style={{ fontSize: '1.8rem' }}>
-            {totalActive.toLocaleString('es-ES')}
+      <section className="card">
+        <div className="section-title">
+          <div>
+            <h2>Roturas por estado operativo</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Lectura complementaria para valorar el impacto en productos ACTIVO y LAB.
+            </p>
           </div>
-        </article>
+          <span className="badge primary">Indicadores secundarios</span>
+        </div>
 
-        <article className="card">
-          <div className="muted">LAB</div>
-          <div className="metric" style={{ fontSize: '1.8rem' }}>
-            {totalLab.toLocaleString('es-ES')}
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="muted">INACTIVO</div>
-          <div className="metric" style={{ fontSize: '1.8rem' }}>
-            {totalInactive.toLocaleString('es-ES')}
-          </div>
-        </article>
-
-        <article className="card">
-          <div className="muted">Otros estados</div>
-          <div className="metric" style={{ fontSize: '1.8rem' }}>
-            {totalOther.toLocaleString('es-ES')}
-          </div>
-        </article>
+        <div className="grid cols-3">
+          <article>
+            <div className="muted">% rotura entre ACTIVO</div>
+            <div className="metric" style={{ fontSize: '1.8rem' }}>
+              {formatPercent(activeStatusShortages, totalActive)}
+            </div>
+          </article>
+          <article>
+            <div className="muted">% rotura entre LAB</div>
+            <div className="metric" style={{ fontSize: '1.8rem' }}>
+              {formatPercent(labStatusShortages, totalLab)}
+            </div>
+          </article>
+          <article>
+            <div className="muted">Productos ACTIVO en rotura</div>
+            <div className="metric" style={{ fontSize: '1.8rem' }}>
+              {activeStatusShortages.toLocaleString('es-ES')}
+            </div>
+          </article>
+        </div>
       </section>
     </div>
   );
