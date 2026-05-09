@@ -9,6 +9,7 @@ export type ActiveSupplyIssue = {
   cn: string;
   articleCode: string;
   shortDescription: string;
+  activeIngredient: string | null;
   status: 'ACTIVO' | 'LAB';
   issueType: string | null;
   startedAt: string | null;
@@ -326,11 +327,26 @@ export async function getActiveSupplyIssues(): Promise<ActiveSupplyIssue[]> {
       },
     })) as ActiveSupplyIssueSourceRow[];
 
+    const activeIngredients = await prisma.cimaCache.findMany({
+      where: { nationalCode: { in: rows.map((row: ActiveSupplyIssueSourceRow) => row.cn) } },
+      select: {
+        nationalCode: true,
+        activeIngredient: true,
+      },
+    });
+    const activeIngredientByCn = new Map(
+      activeIngredients.map((row: { nationalCode: string; activeIngredient: string | null }) => [
+        row.nationalCode,
+        row.activeIngredient,
+      ]),
+    );
+
     return rows
       .map((row: ActiveSupplyIssueSourceRow): ActiveSupplyIssue => ({
         cn: row.cn,
         articleCode: row.watchedMedicine.articleCode,
         shortDescription: row.watchedMedicine.shortDescription,
+        activeIngredient: activeIngredientByCn.get(row.cn) ?? null,
         status: row.watchedMedicine.statusNormalized === 'LAB' ? 'LAB' : 'ACTIVO',
         issueType: row.issueType,
         startedAt: row.startedAt?.toISOString() ?? null,
