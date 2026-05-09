@@ -168,6 +168,21 @@ function normalizeSearchValue(value: string): string {
   return value.trim().toLocaleLowerCase('es');
 }
 
+function getRunStatusBadgeClass(status: string | null | undefined): string {
+  switch (status) {
+    case 'completed':
+      return 'success';
+    case 'completed_with_errors':
+    case 'skipped_locked':
+    case 'running':
+      return 'warning';
+    case 'failed':
+      return 'danger';
+    default:
+      return 'primary';
+  }
+}
+
 export default function MonitorClient({
   overview,
   activeIssues,
@@ -371,70 +386,156 @@ export default function MonitorClient({
 
   return (
     <div className="grid" style={{ gap: 24 }}>
+      <section
+        className="card"
+        style={{
+          display: 'grid',
+          gap: 20,
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        <div
+          aria-hidden="true"
+          style={{
+            background: 'linear-gradient(135deg, rgba(15, 107, 143, 0.16), rgba(8, 122, 85, 0.06))',
+            borderRadius: 999,
+            height: 180,
+            position: 'absolute',
+            right: -70,
+            top: -110,
+            width: 180,
+          }}
+        />
+        <div className="section-title" style={{ alignItems: 'flex-start', gap: 18, marginBottom: 0, position: 'relative' }}>
+          <div style={{ display: 'grid', gap: 8 }}>
+            <span className="badge primary" style={{ width: 'fit-content' }}>Suministro</span>
+            <div>
+              <h1 style={{ letterSpacing: '-0.04em', lineHeight: 1.05, margin: 0 }}>Monitor operativo de suministro</h1>
+              <p className="muted" style={{ margin: '10px 0 0', maxWidth: 760 }}>
+                Esta vista monitoriza los medicamentos vigilables ya conocidos por la app. El TSV solo refresca el universo de
+                productos vigilados; la vigilancia sigue funcionando sobre los CN ya guardados.
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'flex-end' }}>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Productos vigilados</small>
+              <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{overview.watchedProducts}</div>
+            </div>
+            <div
+              style={{
+                background: overview.activeIssues > 0 ? '#fff8e7' : 'var(--surface-alt)',
+                border: `1px solid ${overview.activeIssues > 0 ? 'rgba(154, 103, 0, 0.24)' : 'var(--border)'}`,
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">CN con rotura activa</small>
+              <div className="metric" style={{ fontSize: '1.35rem', margin: '4px 0 0' }}>{overview.activeIssues}</div>
+            </div>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 170,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Última ejecución</small>
+              <div style={{ color: '#0b2337', fontSize: '1.1rem', fontWeight: 850, marginTop: 4 }}>
+                {overview.latestRun ? formatDateTime(overview.latestRun.finishedAt ?? overview.latestRun.startedAt) : '—'}
+              </div>
+            </div>
+            <div
+              style={{
+                background: 'var(--surface-alt)',
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                minWidth: 130,
+                padding: '10px 12px',
+              }}
+            >
+              <small className="muted">Estado último run</small>
+              <div style={{ marginTop: 8 }}>
+                <span className={`badge ${getRunStatusBadgeClass(overview.latestRun?.status)}`}>
+                  {overview.latestRun?.status ?? 'sin runs'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="grid cols-2">
         <article className="card">
-          <div className="section-title">
+          <div className="section-title" style={{ alignItems: 'flex-start' }}>
             <div>
-              <div className="badge primary">Suministro</div>
-              <h1>Monitor AEMPS / CIMA</h1>
+              <div className="badge primary">Monitor AEMPS / CIMA</div>
+              <h2 style={{ marginBottom: 0 }}>Consulta de roturas por CN</h2>
+              <p className="muted" style={{ margin: '6px 0 0' }}>
+                Ejecuta la vigilancia contra CIMA y registra cambios de suministro sobre los productos vigilados.
+              </p>
             </div>
             <span className="badge success">Consulta manual por CN</span>
           </div>
-          <p className="muted">
-            Esta vista monitoriza los medicamentos vigilables ya conocidos por la app. El TSV solo refresca el universo de
-            productos vigilados; la vigilancia sigue funcionando sobre los CN ya guardados.
-          </p>
-          <div className="actions-row">
-            <button
-              className="primary-button"
-              disabled={!canManageManualActions || isMonitorRunning}
-              onClick={handleRunMonitor}
-              style={
-                isMonitorRunning
-                  ? {
-                      opacity: 0.72,
-                      background: '#6f89c9',
-                      transform: 'scale(0.985)',
-                      boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
-                    }
-                  : undefined
-              }
-              type="button"
-            >
-              {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
-            </button>
-            <span className="muted">
-              El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
-              abortar todo el run.
-            </span>
+          <div className="inline-panel">
+            <div className="actions-row" style={{ marginTop: 0 }}>
+              <button
+                className="primary-button"
+                disabled={!canManageManualActions || isMonitorRunning}
+                onClick={handleRunMonitor}
+                style={
+                  isMonitorRunning
+                    ? {
+                        opacity: 0.72,
+                        background: '#6f89c9',
+                        transform: 'scale(0.985)',
+                        boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
+                      }
+                    : undefined
+                }
+                type="button"
+              >
+                {isMonitorRunning ? 'Ejecutando…' : 'Ejecutar monitor AEMPS ahora'}
+              </button>
+              <span className="muted">
+                El monitor consulta CIMA por CN, actualiza estado, registra cambios y conserva los errores por producto sin
+                abortar todo el run.
+              </span>
+            </div>
+            {monitorMessage ? <p className="muted" style={{ marginBottom: 0 }}>{monitorMessage}</p> : null}
           </div>
-          {monitorMessage ? <p className="muted">{monitorMessage}</p> : null}
 
           {overview.latestRun ? (
             <div className="grid cols-2" style={{ gap: 12, marginTop: 18 }}>
-              <div className="list compact-list">
-                <li>
-                  <strong>Inicio</strong>
-                  <div className="muted">{formatDateTime(overview.latestRun.startedAt)}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Inicio</strong>
+                <div className="muted">{formatDateTime(overview.latestRun.startedAt)}</div>
               </div>
-              <div className="list compact-list">
-                <li>
-                  <strong>Fin</strong>
-                  <div className="muted">{formatDateTime(overview.latestRun.finishedAt)}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Fin</strong>
+                <div className="muted">{formatDateTime(overview.latestRun.finishedAt)}</div>
               </div>
-              <div className="list compact-list">
-                <li>
-                  <strong>Estado</strong>
-                  <div className="muted">{overview.latestRun.status}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Estado</strong>
+                <div style={{ marginTop: 6 }}>
+                  <span className={`badge ${getRunStatusBadgeClass(overview.latestRun.status)}`}>{overview.latestRun.status}</span>
+                </div>
               </div>
-              <div className="list compact-list">
-                <li>
-                  <strong>Roturas activas</strong>
-                  <div className="muted">{overview.latestRun.activeIssues}</div>
-                </li>
+              <div className="inline-panel" style={{ background: 'var(--surface)' }}>
+                <strong>Roturas activas</strong>
+                <div className="muted">{overview.latestRun.activeIssues}</div>
               </div>
             </div>
           ) : (
@@ -445,38 +546,40 @@ export default function MonitorClient({
         </article>
 
         <article className="card">
-          <div className="section-title">
+          <div className="section-title" style={{ alignItems: 'flex-start' }}>
             <div>
-              <div className="badge primary">Nomenclátor</div>
-              <h1>Nomenclátor de prescripción</h1>
+              <div className="badge primary">Nomenclátor de prescripción</div>
+              <h2 style={{ marginBottom: 0 }}>Base local de equivalencias</h2>
+              <p className="muted" style={{ margin: '6px 0 0' }}>
+                Actualiza la base local de especialidades equivalentes desde el fichero de Nomenclátor disponible en disco.
+              </p>
             </div>
             <span className="badge success">Actualización manual</span>
           </div>
-          <p className="muted">
-            Actualiza la base local de especialidades equivalentes desde el fichero de Nomenclátor disponible en disco.
-          </p>
-          <div className="actions-row">
-            <button
-              className="primary-button"
-              disabled={!canManageManualActions || isNomenclatorRunning}
-              onClick={handleRunNomenclatorUpdate}
-              style={
-                isNomenclatorRunning
-                  ? {
-                      opacity: 0.72,
-                      background: '#6f89c9',
-                      transform: 'scale(0.985)',
-                      boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
-                    }
-                  : undefined
-              }
-              type="button"
-            >
-              {isNomenclatorRunning ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
-            </button>
-            <span className="muted">Importa el XML local configurado y refresca el resumen operativo al terminar.</span>
+          <div className="inline-panel">
+            <div className="actions-row" style={{ marginTop: 0 }}>
+              <button
+                className="primary-button"
+                disabled={!canManageManualActions || isNomenclatorRunning}
+                onClick={handleRunNomenclatorUpdate}
+                style={
+                  isNomenclatorRunning
+                    ? {
+                        opacity: 0.72,
+                        background: '#6f89c9',
+                        transform: 'scale(0.985)',
+                        boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.22)',
+                      }
+                    : undefined
+                }
+                type="button"
+              >
+                {isNomenclatorRunning ? 'Actualizando…' : 'Actualizar Nomenclátor ahora'}
+              </button>
+              <span className="muted">Importa el XML local configurado y refresca el resumen operativo al terminar.</span>
+            </div>
+            {nomenclatorMessage ? <p className="muted" style={{ marginBottom: 0 }}>{nomenclatorMessage}</p> : null}
           </div>
-          {nomenclatorMessage ? <p className="muted">{nomenclatorMessage}</p> : null}
           {latestNomenclatorRun ? (
             <ul className="list compact-list" style={{ marginTop: 18 }}>
               <li>
@@ -487,7 +590,11 @@ export default function MonitorClient({
               </li>
               <li>
                 <strong>Estado</strong>
-                <div className="muted">{latestNomenclatorRun.status}</div>
+                <div style={{ marginTop: 6 }}>
+                  <span className={`badge ${getRunStatusBadgeClass(latestNomenclatorRun.status)}`}>
+                    {latestNomenclatorRun.status}
+                  </span>
+                </div>
               </li>
               <li>
                 <strong>Productos procesados</strong>
@@ -510,63 +617,40 @@ export default function MonitorClient({
         </article>
       </section>
 
-      <section className="grid cols-3">
-        <article className="card">
-          <div className="badge primary">Productos vigilados</div>
-          <div className="metric">{overview.watchedProducts}</div>
-          <div className="muted">Medicamentos vigilables derivados de Orion con código exacto XXXXXX.CNA.</div>
-        </article>
-        <article className="card">
-          <div className="badge warning">CN con rotura activa</div>
-          <div className="metric">{overview.activeIssues}</div>
-          <div className="muted">Estado actual conocido tras la última consulta realizada.</div>
-        </article>
-        <article className="card">
-          <div className="badge success">Última ejecución</div>
-          <div className="metric">
-            {overview.latestRun ? formatDateTime(overview.latestRun.finishedAt ?? overview.latestRun.startedAt) : '—'}
-          </div>
-          <div className="muted">Último run del monitor guardado en la base local.</div>
-        </article>
-      </section>
-
       <section className="card">
-        <div className="section-title">
-          <h2>Resumen del último run</h2>
-          <span className="badge primary">{overview.latestRun?.status ?? 'sin runs'}</span>
+        <div className="section-title" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ marginBottom: 0 }}>Resumen del último run</h2>
+            <p className="muted" style={{ margin: '6px 0 0' }}>
+              Lectura rápida de resultados del último ciclo de monitorización guardado.
+            </p>
+          </div>
+          <span className={`badge ${getRunStatusBadgeClass(overview.latestRun?.status)}`}>
+            {overview.latestRun?.status ?? 'sin runs'}
+          </span>
         </div>
         {overview.latestRun ? (
-          <div
-            className="grid"
-            style={{
-              gap: 16,
-              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-            }}
-          >
-            <div className="list compact-list">
-              <li>
-                <strong>Nuevas roturas</strong>
-                <div className="muted">{overview.newIssues}</div>
-              </li>
-            </div>
-            <div className="list compact-list">
-              <li>
-                <strong>Roturas resueltas</strong>
-                <div className="muted">{overview.resolvedIssues}</div>
-              </li>
-            </div>
-            <div className="list compact-list">
-              <li>
-                <strong>Productos revisados</strong>
-                <div className="muted">{overview.latestRun.checkedProducts}</div>
-              </li>
-            </div>
-            <div className="list compact-list">
-              <li>
-                <strong>Cambios detectados</strong>
-                <div className="muted">{overview.latestRun.changedProducts}</div>
-              </li>
-            </div>
+          <div className="grid cols-4" style={{ gap: 12 }}>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge warning">Nuevas roturas</div>
+              <div className="metric">{overview.newIssues}</div>
+              <div className="muted">Altas detectadas durante el run.</div>
+            </article>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge success">Roturas resueltas</div>
+              <div className="metric">{overview.resolvedIssues}</div>
+              <div className="muted">Alertas cerradas tras la consulta.</div>
+            </article>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge primary">Productos revisados</div>
+              <div className="metric">{overview.latestRun.checkedProducts}</div>
+              <div className="muted">CN evaluados por el monitor.</div>
+            </article>
+            <article className="card" style={{ background: 'var(--surface-alt)', boxShadow: 'none' }}>
+              <div className="badge primary">Cambios detectados</div>
+              <div className="metric">{overview.latestRun.changedProducts}</div>
+              <div className="muted">Productos con variación registrada.</div>
+            </article>
           </div>
         ) : (
           <p className="muted">Todavía no se ha ejecutado el monitor.</p>
