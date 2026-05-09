@@ -1,64 +1,159 @@
-# Tercera iteración del catálogo Orion + CIMA
+# Arquitectura de Integramécum
 
-## Decisiones de diseño ya cerradas en el importador
+Integramécum es una aplicación interna para Farmacia Hospitalaria basada en Next.js App Router, TypeScript, Prisma y PostgreSQL. Su objetivo operativo es construir un catálogo por Código Nacional (CN) a partir de Orion/TSV y enriquecerlo con nomenclátor, CIMA, BIFIMED y monitorización de suministro.
 
-- Se mantiene **Next.js + TypeScript** como base única de frontend y lógica de servidor.
-- El importador sigue siendo **configurable** y no fija columnas definitivas hasta validar el XLS/XLSX real de Orion.
-- La regla de negocio crítica sigue encapsulada en una sola función: solo se acepta `^\d{6}\.CNA$`.
-- **`medicines_snapshot` representa CN únicos por batch.**
-- **Política de deduplicación cerrada:** gana la primera fila válida observada para cada CN, respetando el orden original del Excel.
-- Del registro ganador se conservan `orionCode`, `localDescription` y `sourceRowNumber`.
-- Tras deduplicar, `sourceRowNumber` significa "fila fuente ganadora del snapshot".
-- Los duplicados válidos no se ocultan: se exponen como `duplicateConflicts`, indicando qué fila gana y cuáles quedan descartadas.
-- La UI actual sigue siendo una **demo del flujo**, no una importación real desde navegador.
-- La integración con CIMA y el uso operativo de Prisma siguen pendientes; en esta iteración solo quedan preparados el modelo y el vocabulario del dominio.
+## Principios de arquitectura
 
-## Estado real de la implementación
+- La unidad principal del catálogo es el CN.
+- PostgreSQL es la base de datos objetivo actual.
+- Prisma centraliza el acceso relacional y genera el cliente en `generated/postgres-client`.
+- La lógica crítica vive en servidor: Server Actions, endpoints API y módulos de `lib/`.
+- Las integraciones externas se cachean localmente para no hacer depender listados de llamadas en tiempo real.
+- Los jobs programados usan endpoints HTTP protegidos, locks, trazabilidad e histórico.
+- `/suministro` y `/automatizacion` son módulos separados.
 
-### Ya resuelto en esta iteración
+## Estructura del repositorio
 
-1. Validación estricta del código Orion con `^\d{6}\.CNA$`.
-2. Extracción del CN a partir de filas válidas.
-3. Distinción clara entre filas válidas/descartadas y snapshot de CN únicos.
-4. Validación explícita de hoja y columnas del Excel en `parseWorkbook`.
-5. Política explícita de deduplicación y exposición de conflictos por CN repetido.
-6. Tests de comportamiento para validador, parser, deduplicación y diff.
-7. Textos UI corregidos para dejar claro que la pantalla de importaciones es una demo.
-8. Nombres alineados entre snapshot, demo y Prisma (`localDescription`, proyecciones demo diferenciadas del modelo persistente).
+```txt
+app/                 Rutas App Router, páginas, layouts y Server Actions
+app/api/jobs/        Endpoints HTTP para jobs programados
+components/          Componentes UI compartidos
+lib/                 Dominio, integraciones, persistencia, auth y jobs
+prisma/              Schema Prisma para PostgreSQL
+scripts/             Scripts manuales de importación/backfill/mantenimiento
+tests/               Tests automatizados de parsers y lógica de negocio
+types/               Tipos auxiliares y extensiones
+generated/           Prisma Client generado localmente; ignorado en Git
+```
 
-### Aún no implementado
+### `app/`
 
-1. Subida real de XLS/XLSX desde la interfaz.
-2. Persistencia real en PostgreSQL mediante Prisma Client.
-3. Migraciones y flujo operativo de base de datos.
-4. Enriquecimiento real con CIMA.
-5. Detección de cambios de descripción para un mismo CN en el diff entre snapshots.
+Contiene la interfaz y las acciones de servidor:
 
-## Contrato actual del importador
+- `/`: dashboard operativo.
+- `/importaciones`: carga manual de TSV de Orion.
+- `/catalogo`: catálogo integrado por CN.
+- `/catalogo/[cn]`: ficha de medicamento.
+- `/suministro`: monitor de suministro estabilizado.
+- `/automatizacion`: revisión de jobs, locks, suscripciones y envíos.
+- `/login`, `/registro`, `/usuarios`: autenticación y gestión de usuarios según rol.
 
-1. Se recibe un workbook XLS/XLSX en backend.
-2. Se valida que exista la hoja indicada.
-3. Se valida que existan las columnas mapeadas.
-4. Se parsean filas en bruto.
-5. Se valida el código Orion.
-6. `raw_import_rows` representa el detalle fila a fila.
-7. `medicines_snapshot` representa CN únicos por batch.
-8. Si un CN válido aparece repetido, gana la primera fila válida del batch.
-9. Los duplicados se devuelven en `duplicateConflicts` y en el resumen (`duplicateNationalCodes`, `duplicateValidRows`).
-10. `parseWorkbook` no devuelve snapshot: su responsabilidad queda limitada a parsear, validar y describir conflictos del batch. El snapshot se construye después, cuando ya existe un `importBatchId` real y una decisión explícita de persistencia.
-11. El diff actual compara presencia/ausencia de CN entre snapshots, no cambios de descripción.
+### `app/api/jobs/`
 
-## Qué queda pendiente del XLS real
+Expone jobs programables por HTTP. Todos requieren secreto de cron y ejecutan lógica de servidor con trazabilidad:
 
-1. Confirmar los nombres reales de las columnas a mapear.
-2. Validar si hay más de una hoja útil por fichero.
-3. Definir qué columnas adicionales deben persistirse en `raw_import_rows` y `medicines_master`.
-4. Confirmar si la primera fila del Excel real es siempre un encabezado estable y usable para el mapeo.
-5. Validar si el criterio "primera fila válida gana" sigue siendo correcto con datos reales o si habrá una prioridad distinta documentada por negocio.
+- `supply-monitor`
+- `nomenclator`
+- `cima-cache`
+- `bifimed-cache`
+- `supply-daily-email-digest`
 
-## Separación de parsers
+### `lib/`
 
-- `lib/orion.ts` mantiene el parser Excel actual orientado al flujo de medicamentos/CN.
-- `lib/orion-tsv.ts` añade el parser específico del catálogo TSV de artículos Orion.
-- `lib/import/header-utils.ts` contiene utilidades genéricas de normalización/resolución de encabezados.
-- `lib/import/types.ts` declara contratos compartidos para headers normalizados, warnings, errors, parse results y `OrionCatalogItem`.
+Agrupa la lógica de dominio y las integraciones:
+
+- Importadores Orion/TSV y utilidades de cabeceras.
+- Consultas de catálogo integrado.
+- Integración CIMA y caché local.
+- Integración BIFIMED y caché local.
+- Actualización/importación de nomenclátor.
+- Monitor de suministro y alternativas.
+- Automatización de jobs, locks e histórico.
+- Autorización, correo y acceso Prisma.
+
+### `prisma/`
+
+Define el modelo relacional. El datasource actual es PostgreSQL y el cliente Prisma se genera en `generated/postgres-client`.
+
+Conceptos funcionales representados en el modelo:
+
+- Importaciones y filas crudas.
+- Snapshot y maestro de medicamentos.
+- Catálogo TSV Orion y medicamentos vigilados.
+- Caché CIMA.
+- Caché BIFIMED.
+- Nomenclátor.
+- Alertas y eventos de suministro.
+- Jobs programados, locks y runs.
+- Suscripciones y envíos de email.
+- Usuarios, roles y estado de aprobación.
+
+### `scripts/`
+
+Contiene utilidades manuales para cargas o backfills. Deben ejecutarse con variables de entorno válidas y acceso a PostgreSQL.
+
+### `tests/`
+
+Contiene pruebas automatizadas de parsers, importadores y lógica de negocio. El comando principal es `npm run test`.
+
+## Módulos funcionales
+
+### Importaciones Orion/TSV
+
+El módulo de importaciones permite cargar exportaciones `.tsv` de Orion Logis. El parser valida filas, separa avisos/errores y persiste importaciones con trazabilidad.
+
+Reglas relevantes:
+
+- El CN extraído del catálogo Orion/TSV alimenta el catálogo operativo.
+- “Incluido en hospital” se calcula como Sí cuando el CN aparece en Orion/TSV.
+- El estado hospitalario se conserva y muestra tal cual viene de Orion.
+- El código Orion no se muestra en el listado de catálogo, pero sí en la ficha de detalle.
+
+También existe lógica histórica/preparada para importaciones tipo XLS/XLSX con validación estricta de códigos `XXXXXX.CNA`; esa regla sigue siendo la referencia para filas medicamentosas cuando se trabaje con ese formato.
+
+### Catálogo por CN
+
+El catálogo cruza fuentes locales por CN:
+
+- Orion/TSV para inclusión hospitalaria y estado hospitalario.
+- Nomenclátor para datos oficiales estructurados.
+- CIMA para ficha oficial, estado de comercialización, ATC, laboratorio y enlaces documentales.
+- BIFIMED para financiación e indicaciones cacheadas.
+- Suministro para incidencias activas y eventos recientes.
+
+### Suministro
+
+El módulo `/suministro` consulta medicamentos vigilados, estados de suministro y eventos. Está estabilizado y no debe mezclarse con el panel de automatización.
+
+### Automatización
+
+El módulo `/automatizacion` permite revisar ejecuciones de jobs, locks activos, suscripciones de email y envíos de digest. Es la zona operativa para IT/Farmacia cuando se supervisan tareas programadas.
+
+### Nomenclátor
+
+El job de nomenclátor puede descargar un ZIP oficial si se configura `NOMENCLATOR_ZIP_URL`, extraer el XML y actualizar la tabla local. También mantiene un fallback mediante `NOMENCLATOR_XML_PATH` cuando se trabaje con XML local.
+
+### CIMA cache
+
+La caché CIMA guarda información oficial por CN para acelerar consultas y evitar llamadas en tiempo real por cada fila de catálogo. Puede requerir ejecución progresiva del job de caché para poblar todos los CN.
+
+### BIFIMED cache
+
+La caché BIFIMED guarda información de financiación, condiciones e indicaciones por CN. Igual que CIMA, puede no estar completa hasta ejecutar jobs/backfills.
+
+### Autenticación
+
+La autenticación es local con Auth.js/NextAuth y usuarios en base de datos. Los roles principales son:
+
+- `ADMIN`: permisos completos, incluida ejecución de acciones administrativas.
+- `LECTURA`: acceso de consulta y carga operativa según flujos habilitados.
+
+## Jobs, locks e histórico
+
+Los jobs programados se implementan como endpoints HTTP protegidos. La infraestructura común:
+
+- Valida `CRON_SECRET`.
+- Registra cada ejecución.
+- Usa locks para evitar solapamientos.
+- Guarda estado, resumen y errores.
+- Permite idempotencia mediante `x-idempotency-key` cuando el cliente lo envía.
+
+La documentación específica está en [scheduled-jobs.md](scheduled-jobs.md).
+
+## Limitaciones actuales
+
+- Las cachés CIMA y BIFIMED pueden requerir carga progresiva; no debe asumirse que estén completas en un entorno recién desplegado.
+- Los datos externos dependen de disponibilidad y formato de fuentes oficiales.
+- No se deben inventar datos CIMA/BIFIMED cuando una caché esté vacía.
+- Las variables de entorno y credenciales son responsabilidad de cada entorno de despliegue.
+- El cliente Prisma generado no se versiona; debe regenerarse con `npx prisma generate`.
