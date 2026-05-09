@@ -216,8 +216,13 @@ export default function MonitorClient({
 
       const normalizedCn = normalizeSearchValue(issue.cn);
       const normalizedDescription = normalizeSearchValue(issue.shortDescription);
+      const normalizedActiveIngredient = issue.activeIngredient ? normalizeSearchValue(issue.activeIngredient) : '';
 
-      return normalizedCn.includes(searchValue) || normalizedDescription.includes(searchValue);
+      return (
+        normalizedCn.includes(searchValue) ||
+        normalizedDescription.includes(searchValue) ||
+        normalizedActiveIngredient.includes(searchValue)
+      );
     });
   }, [activeIssues, showActivo, showLab, activeIssueSearch]);
 
@@ -587,9 +592,9 @@ export default function MonitorClient({
                 <span>LAB</span>
               </label>
               <input
-                aria-label="Buscar por CN o descripción"
+                aria-label="Buscar por CN, descripción o principio activo"
                 onChange={(event) => setActiveIssueSearch(event.target.value)}
-                placeholder="Buscar CN o descripción"
+                placeholder="Buscar por CN, descripción o principio activo"
                 style={{ maxWidth: 320 }}
                 type="text"
                 value={activeIssueSearch}
