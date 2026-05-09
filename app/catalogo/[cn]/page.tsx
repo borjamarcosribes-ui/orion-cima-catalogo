@@ -14,6 +14,51 @@ type DetailFieldProps = {
   emphasized?: boolean;
 };
 
+type BadgeDescriptor = {
+  label: string;
+  className: string;
+};
+
+function commercializationBadge(status: string): BadgeDescriptor {
+  if (status === 'COMERCIALIZADO') {
+    return { label: 'Comercializado', className: 'badge success' };
+  }
+
+  if (status === 'NO_COMERCIALIZADO') {
+    return { label: 'No comercializado', className: 'badge danger' };
+  }
+
+  return { label: status, className: 'badge' };
+}
+
+function bifimedBadge(status: string): BadgeDescriptor {
+  if (status === 'FINANCIADO') {
+    return { label: 'Financiación: FINANCIADO', className: 'badge success' };
+  }
+
+  if (status === 'NO_FINANCIADO') {
+    return { label: 'Financiación: NO_FINANCIADO', className: 'badge danger' };
+  }
+
+  if (status === 'EN_ESTUDIO') {
+    return { label: 'Financiación: EN_ESTUDIO', className: 'badge warning' };
+  }
+
+  return { label: `Financiación: ${status}`, className: 'badge' };
+}
+
+function supplyBadge(status: string): BadgeDescriptor {
+  if (status === 'Sin problemas de suministro') {
+    return { label: `Suministro: ${status}`, className: 'badge success' };
+  }
+
+  if (status === 'Con problemas de suministro') {
+    return { label: `Suministro: ${status}`, className: 'badge warning' };
+  }
+
+  return { label: `Suministro: ${status}`, className: 'badge' };
+}
+
 function formatDate(value: string | null): string {
   if (!value) {
     return 'Sin dato';
@@ -93,6 +138,9 @@ export default async function CatalogDetailPage({ params }: PageProps) {
   const hasDocumentLinks = Boolean(
     detail.technicalSheetUrl || detail.leafletUrl || detail.docsHtmlUrl || detail.leafletHtmlUrl,
   );
+  const commercialization = commercializationBadge(detail.commercializationStatus);
+  const supply = detail.supplyStatus ? supplyBadge(detail.supplyStatus) : null;
+  const bifimedFunding = detail.bifimedFundingStatus ? bifimedBadge(detail.bifimedFundingStatus) : null;
   const hasBifimedData = Boolean(
     detail.bifimedFundingStatus ||
       detail.bifimedModality ||
@@ -147,11 +195,9 @@ export default async function CatalogDetailPage({ params }: PageProps) {
               Incluido en hospital: {detail.includedInHospital ? 'Sí' : 'No'}
             </span>
             {detail.hospitalStatusOriginal ? <span className="badge">Orion: {detail.hospitalStatusOriginal}</span> : null}
-            <span className="badge primary">{detail.commercializationStatus}</span>
-            {detail.supplyStatus ? <span className="badge warning">Suministro: {detail.supplyStatus}</span> : null}
-            {detail.bifimedFundingStatus ? (
-              <span className="badge success">Financiación: {detail.bifimedFundingStatus}</span>
-            ) : null}
+            <span className={commercialization.className}>{commercialization.label}</span>
+            {supply ? <span className={supply.className}>{supply.label}</span> : null}
+            {bifimedFunding ? <span className={bifimedFunding.className}>{bifimedFunding.label}</span> : null}
           </div>
         </div>
 
