@@ -657,34 +657,93 @@ export default function MonitorClient({
         )}
       </section>
 
-      <section className="card">
-        <div className="section-title">
-          <h2>Roturas activas</h2>
-          <span className="badge warning">{sortedActiveIssues.length}</span>
+      <section
+        className="card"
+        style={{
+          background: 'linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)',
+          border: '1px solid rgba(15, 107, 143, 0.12)',
+          boxShadow: '0 18px 45px rgba(11, 43, 66, 0.08)',
+        }}
+      >
+        <div className="section-title" style={{ alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span className="badge warning" style={{ width: 'fit-content' }}>Vigilancia activa</span>
+            <h2 style={{ letterSpacing: '-0.03em', marginBottom: 0 }}>Roturas activas</h2>
+            <p className="muted" style={{ margin: 0 }}>
+              Seguimiento operativo de alertas abiertas con búsqueda rápida y filtros por estado local.
+            </p>
+          </div>
+          <span className="badge warning" style={{ fontSize: '0.95rem', padding: '8px 12px' }}>
+            {sortedActiveIssues.length} visibles
+          </span>
         </div>
         {activeIssues.length === 0 ? (
-          <p className="muted">No hay roturas activas persistidas en este momento.</p>
+          <div
+            className="inline-panel"
+            style={{
+              background: 'rgba(8, 122, 85, 0.06)',
+              border: '1px solid rgba(8, 122, 85, 0.16)',
+              marginTop: 16,
+            }}
+          >
+            <strong>Sin incidencias activas</strong>
+            <p className="muted" style={{ margin: '6px 0 0' }}>No hay roturas activas persistidas en este momento.</p>
+          </div>
         ) : (
           <>
-            <div className="actions-row" style={{ marginBottom: 16 }}>
-              <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
-                <input checked={showActivo} onChange={(event) => setShowActivo(event.target.checked)} type="checkbox" />
-                <span>ACTIVO</span>
-              </label>
-              <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
-                <input checked={showLab} onChange={(event) => setShowLab(event.target.checked)} type="checkbox" />
-                <span>LAB</span>
-              </label>
+            <div
+              className="inline-panel"
+              style={{
+                alignItems: 'center',
+                background: 'rgba(15, 107, 143, 0.06)',
+                border: '1px solid rgba(15, 107, 143, 0.14)',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 12,
+                justifyContent: 'space-between',
+                marginBottom: 18,
+              }}
+            >
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                <label
+                  style={{
+                    alignItems: 'center',
+                    background: showActivo ? '#fff8e7' : 'var(--surface)',
+                    border: `1px solid ${showActivo ? 'rgba(154, 103, 0, 0.24)' : 'var(--border)'}`,
+                    borderRadius: 999,
+                    display: 'inline-flex',
+                    gap: 8,
+                    padding: '8px 12px',
+                  }}
+                >
+                  <input checked={showActivo} onChange={(event) => setShowActivo(event.target.checked)} type="checkbox" />
+                  <span>ACTIVO</span>
+                </label>
+                <label
+                  style={{
+                    alignItems: 'center',
+                    background: showLab ? '#eef6ff' : 'var(--surface)',
+                    border: `1px solid ${showLab ? 'rgba(15, 107, 143, 0.22)' : 'var(--border)'}`,
+                    borderRadius: 999,
+                    display: 'inline-flex',
+                    gap: 8,
+                    padding: '8px 12px',
+                  }}
+                >
+                  <input checked={showLab} onChange={(event) => setShowLab(event.target.checked)} type="checkbox" />
+                  <span>LAB</span>
+                </label>
+              </div>
               <input
                 aria-label="Buscar por CN, descripción o principio activo"
                 onChange={(event) => setActiveIssueSearch(event.target.value)}
                 placeholder="Buscar por CN, descripción o principio activo"
-                style={{ maxWidth: 320 }}
+                style={{ flex: '1 1 280px', maxWidth: 420 }}
                 type="text"
                 value={activeIssueSearch}
               />
             </div>
-            <div className="table-scroll">
+            <div className="table-scroll" style={{ border: '1px solid var(--border)', borderRadius: 16 }}>
               <table className="table">
                 <thead>
                   <tr>
@@ -740,7 +799,7 @@ export default function MonitorClient({
 
                     return (
                       <Fragment key={`${issue.cn}-${issue.articleCode}`}>
-                        <tr>
+                        <tr style={{ background: isExpanded ? 'rgba(15, 107, 143, 0.04)' : undefined }}>
                           <td>{issue.cn}</td>
                           <td>{issue.status}</td>
                           <td>{issue.shortDescription}</td>
@@ -756,11 +815,19 @@ export default function MonitorClient({
                         </tr>
                         {isExpanded ? (
                           <tr>
-                            <td colSpan={8}>
-                              <div className="inline-panel">
-                                <div className="section-title">
+                            <td colSpan={8} style={{ background: 'rgba(248, 251, 255, 0.96)' }}>
+                              <div
+                                className="inline-panel"
+                                style={{
+                                  background: '#ffffff',
+                                  border: '1px solid rgba(15, 107, 143, 0.16)',
+                                  boxShadow: '0 16px 36px rgba(11, 43, 66, 0.08)',
+                                }}
+                              >
+                                <div className="section-title" style={{ alignItems: 'flex-start' }}>
                                   <div>
-                                    <h3 style={{ marginBottom: 8 }}>Alternativas equivalentes</h3>
+                                    <span className="badge primary" style={{ width: 'fit-content' }}>Equivalencias</span>
+                                    <h3 style={{ margin: '8px 0' }}>Alternativas equivalentes</h3>
                                     <div className="muted">
                                       Cruce a través de nomenclator de especialidades equivalentes (mismo principio
                                       activo, misma dosis y misma forma farmacéutica).
@@ -774,7 +841,16 @@ export default function MonitorClient({
 
                                 {panelData ? (
                                   <div className="grid" style={{ gap: 16 }}>
-                                    <div className="grid cols-2" style={{ gap: 12 }}>
+                                    <div
+                                      className="grid cols-2"
+                                      style={{
+                                        background: 'var(--surface-alt)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: 14,
+                                        gap: 12,
+                                        padding: 14,
+                                      }}
+                                    >
                                       <div>
                                         <strong>CN origen</strong>
                                         <div className="muted">{panelData.sourceMedicine.cn}</div>
@@ -811,7 +887,18 @@ export default function MonitorClient({
                                       </div>
                                     </div>
 
-                                    <label style={{ alignItems: 'center', display: 'inline-flex', gap: 8 }}>
+                                    <label
+                                      style={{
+                                        alignItems: 'center',
+                                        background: 'var(--surface-alt)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: 999,
+                                        display: 'inline-flex',
+                                        gap: 8,
+                                        padding: '8px 12px',
+                                        width: 'fit-content',
+                                      }}
+                                    >
                                       <input
                                         checked={showNonCommercialized}
                                         onChange={(event) => setShowNonCommercialized(event.target.checked)}
@@ -823,7 +910,7 @@ export default function MonitorClient({
                                     {visibleAlternatives.length === 0 ? (
                                       <p className="muted">No hay alternativas visibles con el filtro actual.</p>
                                     ) : (
-                                      <div className="table-scroll">
+                                      <div className="table-scroll" style={{ border: '1px solid var(--border)', borderRadius: 14 }}>
                                         <table className="table">
                                           <thead>
                                             <tr>
@@ -876,15 +963,39 @@ export default function MonitorClient({
         )}
       </section>
 
-      <section className="card">
-        <div className="section-title">
-          <h2>Eventos recientes</h2>
-          <span className="badge primary">{overview.recentEvents.length}</span>
+      <section
+        className="card"
+        style={{
+          background: 'linear-gradient(180deg, #ffffff 0%, #f7faf8 100%)',
+          border: '1px solid rgba(8, 122, 85, 0.12)',
+        }}
+      >
+        <div className="section-title" style={{ alignItems: 'flex-start', gap: 16 }}>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span className="badge primary" style={{ width: 'fit-content' }}>Trazabilidad</span>
+            <h2 style={{ letterSpacing: '-0.03em', marginBottom: 0 }}>Eventos recientes</h2>
+            <p className="muted" style={{ margin: 0 }}>Últimas altas, cierres y cambios registrados por el monitor.</p>
+          </div>
+          <span className="badge primary" style={{ fontSize: '0.95rem', padding: '8px 12px' }}>
+            {overview.recentEvents.length} eventos
+          </span>
         </div>
         {overview.recentEvents.length === 0 ? (
-          <p className="muted">Todavía no hay eventos relevantes de suministro.</p>
+          <div
+            className="inline-panel"
+            style={{
+              background: 'rgba(15, 107, 143, 0.05)',
+              border: '1px solid rgba(15, 107, 143, 0.14)',
+              marginTop: 16,
+            }}
+          >
+            <strong>Sin eventos recientes</strong>
+            <p className="muted" style={{ margin: '6px 0 0' }}>
+              Todavía no hay eventos relevantes de suministro.
+            </p>
+          </div>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll" style={{ border: '1px solid var(--border)', borderRadius: 16 }}>
             <table className="table">
               <thead>
                 <tr>
