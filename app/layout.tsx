@@ -47,11 +47,11 @@ export default async function RootLayout({
 
             <nav className="nav-links" aria-label="Principal">
               <NavLink href="/">Inicio</NavLink>
-              <NavLink href="/importaciones">Importación Orion Logis</NavLink>
-              <NavLink href="/catalogo">CIMA Integrada</NavLink>
-              <NavLink href="/suministro">Gestor de Roturas</NavLink>
+              <NavLink href="/importaciones">Importaciones</NavLink>
+              <NavLink href="/catalogo">Catálogo</NavLink>
+              <NavLink href="/suministro">Suministro</NavLink>
               <NavLink href="/automatizacion">
-                Panel de Automatizaciones
+                Automatización
               </NavLink>
               {role === 'ADMIN' ? <NavLink href="/usuarios">Usuarios</NavLink> : null}
             </nav>
