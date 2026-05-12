@@ -106,6 +106,18 @@ function bifimedBadge(status: string | null): { label: string; className: string
   return { label: 'Sin dato BIFIMED', className: 'badge' };
 }
 
+function unitDoseBadge(isUnitDose: boolean | null): { label: string; className: string } {
+  if (isUnitDose === true) {
+    return { label: 'Dosis unitaria: Sí', className: 'badge success' };
+  }
+
+  if (isUnitDose === false) {
+    return { label: 'No consta unidosis', className: 'badge' };
+  }
+
+  return { label: 'Sin dato SCMFH', className: 'badge' };
+}
+
 function commercializationBadge(status: string): { label: string; className: string } {
   if (status === 'COMERCIALIZADO') {
     return { label: 'Comercializado', className: 'badge success' };
@@ -309,6 +321,7 @@ export default async function CatalogPage({ searchParams }: PageProps) {
         {data.rows.map((medicine) => {
           const financing = bifimedBadge(medicine.bifimedFundingStatus);
           const commercialization = commercializationBadge(medicine.commercializationStatus);
+          const unitDose = unitDoseBadge(medicine.isUnitDose);
           const bifimedSummary = shortText(medicine.bifimedSummary);
 
           return (
@@ -337,6 +350,7 @@ export default async function CatalogPage({ searchParams }: PageProps) {
                       </span>
                       <span className={commercialization.className}>{commercialization.label}</span>
                       <span className={financing.className}>BIFIMED: {financing.label}</span>
+                      <span className={unitDose.className}>{unitDose.label}</span>
                       <span className={medicine.includedInHospital ? 'badge primary' : 'badge'}>
                         Incluido en hospital: {formatBool(medicine.includedInHospital)}
                       </span>
