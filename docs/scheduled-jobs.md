@@ -94,6 +94,27 @@ Variable relacionada:
 
 - `BIFIMED_BASE_URL`, opcional si se quiere sobrescribir la URL base por defecto.
 
+
+### `POST /api/jobs/unit-dose-cache`
+
+Refresca la caché local de unidosis SCMFH reutilizando el importador ya existente.
+
+Flujo:
+
+1. Si `SCMFH_UNIT_DOSE_XLS_URL` está configurada, descarga directamente ese XLS/XLSX.
+2. Si no hay URL directa, consulta `SCMFH_UNIT_DOSE_PAGE_URL` y descubre el primer enlace `.xls`/`.xlsx` de la página, resolviendo también enlaces relativos.
+3. Guarda el fichero en `SCMFH_UNIT_DOSE_TEMP_DIR` de forma temporal.
+4. Importa la caché SCMFH de unidosis.
+5. Limpia el fichero temporal al finalizar.
+
+Variables relacionadas:
+
+- `SCMFH_UNIT_DOSE_XLS_URL`, opcional para fijar una URL directa al Excel SCMFH.
+- `SCMFH_UNIT_DOSE_PAGE_URL`, página SCMFH donde descubrir el primer enlace `.xls`/`.xlsx` si no hay URL directa.
+- `SCMFH_UNIT_DOSE_TEMP_DIR`, directorio local para descargas temporales.
+
+El job no borra datos previos si la descarga o la importación falla; la operación se limita a insertar o actualizar filas cuando el importador llega a procesar correctamente el fichero.
+
 ### `POST /api/jobs/supply-daily-email-digest`
 
 Envía el digest diario de incidencias de suministro a suscripciones activas.
@@ -125,6 +146,7 @@ La frecuencia exacta debe validarse con IT y Farmacia según disponibilidad de f
 - Monitor de suministro: periódico, al menos diario si el entorno lo permite.
 - Nomenclátor: según publicación oficial y política interna.
 - Caché CIMA/BIFIMED: carga progresiva y refrescos controlados.
+- Caché SCMFH de unidosis: semanal, salvo que Farmacia e IT acuerden una frecuencia distinta.
 - Digest diario: una vez al día, alineado con la jornada operativa.
 
 ## Checklist operativo
