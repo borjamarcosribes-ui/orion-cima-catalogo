@@ -66,6 +66,18 @@ describe('SCMFH unit dose import helpers', () => {
     expect(mapped.data.detectedAt).toBeInstanceOf(Date);
   });
 
+
+  it('maps pre-2000 detectedAt values as null', () => {
+    const mapped = mapUnitDoseRow({
+      'ns1:cod_nacion': '123456',
+      unidosis: 'SI',
+      detectado: '1999-12-31',
+    });
+
+    expect(mapped.discarded).toBe(false);
+    expect(mapped.data.detectedAt).toBeNull();
+  });
+
   it('discards rows without a valid CN', () => {
     expect(mapUnitDoseRow({ 'ns1:cod_nacion': 'ABC123', unidosis: 'SI' })).toMatchObject({
       discarded: true,
