@@ -1,8 +1,5 @@
-import { createWriteStream } from 'node:fs';
-import { mkdir, unlink } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 
 export const SCMFH_UNIT_DOSE_XLS_URL = process.env.SCMFH_UNIT_DOSE_XLS_URL?.trim() || '';
 export const SCMFH_UNIT_DOSE_PAGE_URL =
@@ -81,7 +78,7 @@ async function downloadToTempFile(sourceUrl: string): Promise<{ filePath: string
   const filePath = join(SCMFH_UNIT_DOSE_TEMP_DIR, `${Date.now()}-${fileName}`);
 
   await mkdir(SCMFH_UNIT_DOSE_TEMP_DIR, { recursive: true });
-  await pipeline(Readable.from(Buffer.from(arrayBuffer)), createWriteStream(filePath));
+  await writeFile(filePath, Buffer.from(arrayBuffer));
 
   return { filePath, downloadedBytes };
 }
