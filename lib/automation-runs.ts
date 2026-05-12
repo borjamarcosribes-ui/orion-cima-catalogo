@@ -6,7 +6,8 @@ export type AutomationProcessKey =
   | 'CIMA_WATCHED'
   | 'CIMA_ALL'
   | 'BIFIMED_ALL'
-  | 'SUPPLY_EMAIL_DIGEST';
+  | 'SUPPLY_EMAIL_DIGEST'
+  | 'UNIT_DOSE_CACHE';
 
 export type AutomationOriginFilter = 'all' | 'manual' | 'scheduled';
 export type AutomationStatusFilter = 'all' | 'failed';
@@ -129,6 +130,10 @@ function formatProcess(jobName: string): {
 
   if (jobName === 'SUPPLY_DAILY_EMAIL_DIGEST') {
     return { key: 'SUPPLY_EMAIL_DIGEST', label: 'Digest diario por email' };
+  }
+
+  if (jobName === 'UNIT_DOSE_CACHE_REFRESH') {
+    return { key: 'UNIT_DOSE_CACHE', label: 'SCMFH unidosis' };
   }
 
   return { key: 'SUPPLY_MONITOR', label: 'Monitor AEMPS / CIMA' };
@@ -262,6 +267,28 @@ function summarizeSupplyEmailDigest(summary: Record<string, unknown>): string {
   return parts.length > 0 ? parts.join(' · ') : 'Sin resumen disponible';
 }
 
+function summarizeUnitDoseRefresh(summary: Record<string, unknown>): string {
+  const processed =
+    typeof summary.processed === 'number' ? summary.processed : null;
+  const insertedOrUpdated =
+    typeof summary.insertedOrUpdated === 'number'
+      ? summary.insertedOrUpdated
+      : null;
+  const unitDoseCount =
+    typeof summary.unitDoseCount === 'number' ? summary.unitDoseCount : null;
+  const discarded =
+    typeof summary.discarded === 'number' ? summary.discarded : null;
+
+  const parts = [
+    processed !== null ? `${processed} procesados` : null,
+    insertedOrUpdated !== null ? `${insertedOrUpdated} actualizados` : null,
+    unitDoseCount !== null ? `${unitDoseCount} unidosis` : null,
+    discarded !== null ? `${discarded} descartados` : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? parts.join(' · ') : 'Sin resumen disponible';
+}
+
 function summarizeRun(
   jobName: string,
   summary: Record<string, unknown>,
@@ -291,6 +318,10 @@ function summarizeRun(
     return summarizeSupplyEmailDigest(summary);
   }
 
+  if (jobName === 'UNIT_DOSE_CACHE_REFRESH') {
+    return summarizeUnitDoseRefresh(summary);
+  }
+
   return summarizeSupplyMonitor(summary, supplyMonitorRunById);
 }
 
@@ -307,6 +338,7 @@ export async function getAutomationDashboardData(
     latestCimaAllRun,
     latestBifimedAllRun,
     latestSupplyEmailDigestRun,
+    latestUnitDoseCacheRun,
     locks,
     notificationSubscriptions,
     notificationRuns,
@@ -321,6 +353,7 @@ export async function getAutomationDashboardData(
             'CIMA_CACHE_REFRESH_ALL',
             'BIFIMED_CACHE_REFRESH_ALL',
             'SUPPLY_DAILY_EMAIL_DIGEST',
+            'UNIT_DOSE_CACHE_REFRESH',
           ],
         },
       },
@@ -353,6 +386,10 @@ export async function getAutomationDashboardData(
       where: { jobName: 'SUPPLY_DAILY_EMAIL_DIGEST' },
       orderBy: { startedAt: 'desc' },
     }),
+    prisma.scheduledJobRun.findFirst({
+      where: { jobName: 'UNIT_DOSE_CACHE_REFRESH' },
+      orderBy: { startedAt: 'desc' },
+    }),
     prisma.executionLock.findMany({
       where: {
         key: {
@@ -363,6 +400,7 @@ export async function getAutomationDashboardData(
             'cima_cache_refresh_all',
             'bifimed_cache_refresh_all',
             'supply_daily_email_digest',
+            'unit_dose_cache_refresh',
           ],
         },
         expiresAt: { gte: now },
@@ -508,6 +546,17 @@ export async function getAutomationDashboardData(
           : null,
         status: latestSupplyEmailDigestRun?.status ?? null,
       },
+      {
+        processKey: 'UNIT_DOSE_CACHE',
+        processLabel: 'SCMFH unidosis',
+        lastRunAt: latestUnitDoseCacheRun
+          ? (
+              latestUnitDoseCacheRun.finishedAt ??
+              latestUnitDoseCacheRun.startedAt
+            ).toISOString()
+          : null,
+        status: latestUnitDoseCacheRun?.status ?? null,
+      },
     ],
     locks: [
       { key: 'nomenclator_update', label: 'Nomenclátor' },
@@ -516,6 +565,7 @@ export async function getAutomationDashboardData(
       { key: 'cima_cache_refresh_all', label: 'Caché CIMA (all)' },
       { key: 'bifimed_cache_refresh_all', label: 'Caché BIFIMED (all)' },
       { key: 'supply_daily_email_digest', label: 'Digest diario por email' },
+      { key: 'unit_dose_cache_refresh', label: 'SCMFH unidosis' },
     ].map((item: { key: string; label: string }) => {
       const lock = activeLockByKey.get(item.key) ?? null;
 
