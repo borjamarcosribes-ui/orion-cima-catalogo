@@ -44,7 +44,7 @@ describe('SCMFH unit dose downloader', () => {
 
   it('discovers the first relative XLS/XLSX link from the SCMFH page', async () => {
     const tempDir = join(tmpdir(), `unit-dose-discovered-${Date.now()}`);
-    const pageHtml = '<html><a href="/docs/unidosis.xlsx">Unidosis</a></html>';
+    const pageHtml = '<html><a href="/download/MEDICAMENTOSACTIVOS.xlsx?version=1&amp;token=abc">Unidosis</a></html>';
     const body = Buffer.from('xlsx-content');
     const fetchMock = vi
       .fn()
@@ -61,9 +61,12 @@ describe('SCMFH unit dose downloader', () => {
     const source = await prepareUnitDoseSource();
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://www.scmfh.es/ver_datos.asp?id_sec=5');
-    expect(fetchMock).toHaveBeenNthCalledWith(2, 'https://www.scmfh.es/docs/unidosis.xlsx');
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://www.scmfh.es/download/MEDICAMENTOSACTIVOS.xlsx?version=1&token=abc',
+    );
     expect(source.sourceMode).toBe('discovered');
-    expect(source.sourceUrl).toBe('https://www.scmfh.es/docs/unidosis.xlsx');
+    expect(source.sourceUrl).toBe('https://www.scmfh.es/download/MEDICAMENTOSACTIVOS.xlsx?version=1&token=abc');
     expect(source.downloadedBytes).toBe(body.byteLength);
     await expect(readFile(source.filePath, 'utf8')).resolves.toBe('xlsx-content');
 

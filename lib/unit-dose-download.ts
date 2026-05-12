@@ -39,16 +39,21 @@ async function fetchOk(url: string): Promise<Response> {
   return response;
 }
 
-function discoverSpreadsheetUrl(html: string, pageUrl: string): string {
-  const hrefPattern = /href\s*=\s*(?:"([^"]+\.xlsx?)(?:[^"]*)"|'([^']+\.xlsx?)(?:[^']*)'|([^\s>]+\.xlsx?)(?:[^\s>]*)?)/i;
-  const match = html.match(hrefPattern);
-  const href = match?.[1] ?? match?.[2] ?? match?.[3];
+function decodeHtmlAttribute(value: string): string {
+  return value.replace(/&amp;/gi, '&');
+}
 
-  if (!href) {
-    throw new Error('No se encontró ningún enlace .xls/.xlsx en la página SCMFH.');
+function discoverSpreadsheetUrl(html: string, pageUrl: string): string {
+  const hrefPattern = /href\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/gi;
+
+  for (const match of html.matchAll(hrefPattern)) {
+    const href = decodeHtmlAttribute(match[1] ?? match[2] ?? match[3] ?? '');
+    if (/\.xlsx?(?:[?#]|$)/i.test(href)) {
+      return new URL(href, pageUrl).toString();
+    }
   }
 
-  return new URL(href, pageUrl).toString();
+  throw new Error('No se encontró ningún enlace .xls/.xlsx en la página SCMFH.');
 }
 
 async function resolveSource(): Promise<{ sourceMode: UnitDoseSourceMode; sourceUrl: string }> {
