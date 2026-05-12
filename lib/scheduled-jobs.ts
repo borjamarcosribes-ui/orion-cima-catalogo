@@ -6,7 +6,8 @@ export type ScheduledJobName =
   | 'CIMA_CACHE_REFRESH_WATCHED'
   | 'CIMA_CACHE_REFRESH_ALL'
   | 'BIFIMED_CACHE_REFRESH_ALL'
-  | 'SUPPLY_DAILY_EMAIL_DIGEST';
+  | 'SUPPLY_DAILY_EMAIL_DIGEST'
+  | 'UNIT_DOSE_CACHE_REFRESH';
 
 export type ScheduledTriggerType = 'scheduled_http' | 'manual_http' | 'internal';
 export type ScheduledJobStatus = 'running' | 'completed' | 'completed_with_errors' | 'failed' | 'skipped_locked';
@@ -24,6 +25,7 @@ const LOCK_TTLS_MS: Record<ScheduledJobName, number> = {
   CIMA_CACHE_REFRESH_ALL: 24 * 60 * 60 * 1000,
   BIFIMED_CACHE_REFRESH_ALL: 24 * 60 * 60 * 1000,
   SUPPLY_DAILY_EMAIL_DIGEST: 2 * 60 * 60 * 1000,
+  UNIT_DOSE_CACHE_REFRESH: 4 * 60 * 60 * 1000,
 };
 
 const LOCK_KEYS: Record<ScheduledJobName, string> = {
@@ -33,6 +35,7 @@ const LOCK_KEYS: Record<ScheduledJobName, string> = {
   CIMA_CACHE_REFRESH_ALL: 'cima_cache_refresh_all',
   BIFIMED_CACHE_REFRESH_ALL: 'bifimed_cache_refresh_all',
   SUPPLY_DAILY_EMAIL_DIGEST: 'supply_daily_email_digest',
+  UNIT_DOSE_CACHE_REFRESH: 'unit_dose_cache_refresh',
 };
 
 export function getScheduledJobLockKey(jobName: ScheduledJobName): string {
