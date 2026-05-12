@@ -48,6 +48,8 @@ export type MedicineAlternative = {
   hospitalStatusNormalized: string | null;
   hospitalPresenceStatus: HospitalPresenceStatus;
   hospitalPriority: 1 | 2 | 3 | 4 | 5;
+  isUnitDose: boolean | null;
+  unitDoseRaw: string | null;
 };
 
 export type MedicineAlternativesResult = {
@@ -89,6 +91,12 @@ type AlternativeSupplyLookupResult = {
   supplyStartedAt: string | null;
   supplyExpectedEndAt: string | null;
   supplyObservations: string | null;
+};
+
+type UnitDoseState = {
+  cn: string;
+  isUnitDose: boolean;
+  unitDoseRaw: string | null;
 };
 
 type LocalHospitalState = {
@@ -164,6 +172,23 @@ async function getSourceMedicineContext(cn: string, codDcp: string | null): Prom
     observations: row.observations,
     codDcp,
   };
+}
+
+async function loadUnitDoseStateByCn(cns: string[]): Promise<Map<string, UnitDoseState>> {
+  const rows = await prisma.unitDoseCache.findMany({
+    where: {
+      cn: {
+        in: cns,
+      },
+    },
+    select: {
+      cn: true,
+      isUnitDose: true,
+      unitDoseRaw: true,
+    },
+  });
+
+  return new Map(rows.map((row: UnitDoseState) => [row.cn, row]));
 }
 
 async function loadLocalHospitalStateByCn(cns: string[]): Promise<Map<string, LocalHospitalState>> {
@@ -265,9 +290,10 @@ export async function getMedicineAlternatives(
     }
 
     const alternativeCns = nomenclatorAlternatives.map((item) => item.cn);
-    const [localHospitalState, supplyStatuses] = await Promise.all([
+    const [localHospitalState, supplyStatuses, unitDoseState] = await Promise.all([
       loadLocalHospitalStateByCn(alternativeCns),
       lookupSupplyStatusesWithConcurrency(alternativeCns),
+      loadUnitDoseStateByCn(alternativeCns),
     ]);
 
     const alternatives = nomenclatorAlternatives
@@ -282,6 +308,7 @@ export async function getMedicineAlternatives(
           supplyExpectedEndAt: null,
           supplyObservations: null,
         };
+        const unitDose = unitDoseState.get(item.cn) ?? null;
 
         return {
           cn: item.cn,
@@ -299,6 +326,8 @@ export async function getMedicineAlternatives(
           hospitalStatusNormalized: localState?.statusNormalized ?? null,
           hospitalPresenceStatus,
           hospitalPriority: mapHospitalPriority(hospitalPresenceStatus),
+          isUnitDose: unitDose?.isUnitDose ?? null,
+          unitDoseRaw: unitDose?.unitDoseRaw ?? null,
         };
       })
       .sort((left, right) => {

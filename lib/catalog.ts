@@ -30,6 +30,8 @@ export type CatalogListItem = {
   bifimedSummary: string | null;
   hasActiveSupplyIssue: boolean;
   supplyStatusLabel: string | null;
+  isUnitDose: boolean | null;
+  unitDoseRaw: string | null;
 };
 
 export type CatalogListResult = {
@@ -55,6 +57,11 @@ export type CatalogDetail = {
   localDescription: string | null;
   lastDetectedAt: string | null;
   lastImportedAt: string | null;
+  isUnitDose: boolean | null;
+  unitDoseRaw: string | null;
+  unitDoseQuantity: string | null;
+  unitDoseSourceFileName: string | null;
+  unitDoseImportedAt: string | null;
   bifimedFundingStatus: string | null;
   bifimedSummary: string | null;
   bifimedModality: string | null;
@@ -113,6 +120,12 @@ type CatalogWatchedRow = {
   statusOriginal: string;
   lastSeenAt: Date;
   supplyStatus: WatchedSupplyStatusRow | null;
+};
+
+type CatalogUnitDoseRow = {
+  cn: string;
+  isUnitDose: boolean;
+  unitDoseRaw: string | null;
 };
 
 type CatalogBifimedRow = {
@@ -249,7 +262,7 @@ export async function listCatalogByCn(
   const page = normalizePage(filters.page);
   const pageSize = normalizePageSize(filters.pageSize);
 
-  const [nomenclatorRows, cimaRows, watchedRows, bifimedRows] =
+  const [nomenclatorRows, cimaRows, watchedRows, bifimedRows, unitDoseRows] =
     await Promise.all([
       prisma.nomenclatorProduct.findMany({
         select: {
@@ -304,6 +317,13 @@ export async function listCatalogByCn(
           nomenclatorState: true,
         },
       }),
+      prisma.unitDoseCache.findMany({
+        select: {
+          cn: true,
+          isUnitDose: true,
+          unitDoseRaw: true,
+        },
+      }),
     ]);
 
   const cimaByCn = new Map<string, CatalogCimaRow>(
@@ -318,11 +338,16 @@ export async function listCatalogByCn(
     bifimedRows.map((row: CatalogBifimedRow) => [row.cn, row] as const),
   );
 
+  const unitDoseByCn = new Map<string, CatalogUnitDoseRow>(
+    unitDoseRows.map((row: CatalogUnitDoseRow) => [row.cn, row] as const),
+  );
+
   const mergedRows: CatalogListItem[] = nomenclatorRows.map(
     (row: CatalogBaseRow) => {
       const cima = cimaByCn.get(row.cn) ?? null;
       const watched = watchedByCn.get(row.cn) ?? null;
       const bifimed = bifimedByCn.get(row.cn) ?? null;
+      const unitDose = unitDoseByCn.get(row.cn) ?? null;
       const supply = resolveSupplySignal(watched, cima);
 
       return {
@@ -343,6 +368,8 @@ export async function listCatalogByCn(
         bifimedSummary: bifimed?.summary ?? null,
         hasActiveSupplyIssue: supply.hasActiveSupplyIssue,
         supplyStatusLabel: supply.supplyStatusLabel,
+        isUnitDose: unitDose?.isUnitDose ?? null,
+        unitDoseRaw: unitDose?.unitDoseRaw ?? null,
       };
     },
   );
@@ -447,6 +474,7 @@ export async function getCatalogDetailByCn(
     bifimed,
     bifimedIndications,
     cimaCharacteristics,
+    unitDose,
   ] = await Promise.all([
     prisma.nomenclatorProduct.findUnique({
       where: { cn: normalizedCn },
@@ -472,6 +500,9 @@ export async function getCatalogDetailByCn(
     prisma.cimaCharacteristicCache.findMany({
       where: { nationalCode: normalizedCn },
       orderBy: { sortOrder: 'asc' },
+    }),
+    prisma.unitDoseCache.findUnique({
+      where: { cn: normalizedCn },
     }),
   ]);
 
@@ -499,6 +530,11 @@ export async function getCatalogDetailByCn(
     localDescription: watched?.shortDescription ?? null,
     lastDetectedAt: normalizeIso(watched?.lastSeenAt),
     lastImportedAt: normalizeIso(lastImport?.importedAt),
+    isUnitDose: unitDose?.isUnitDose ?? null,
+    unitDoseRaw: unitDose?.unitDoseRaw ?? null,
+    unitDoseQuantity: unitDose?.quantity ?? null,
+    unitDoseSourceFileName: unitDose?.sourceFileName ?? null,
+    unitDoseImportedAt: normalizeIso(unitDose?.importedAt),
     bifimedFundingStatus: bifimed?.fundingStatus ?? null,
     bifimedSummary: bifimed?.summary ?? null,
     bifimedModality: bifimed?.fundingModality ?? null,

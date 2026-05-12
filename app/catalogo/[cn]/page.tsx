@@ -47,6 +47,42 @@ function bifimedBadge(status: string): BadgeDescriptor {
   return { label: `Financiación: ${status}`, className: 'badge' };
 }
 
+function unitDoseBadge(isUnitDose: boolean | null): BadgeDescriptor {
+  if (isUnitDose === true) {
+    return { label: 'Dosis unitaria: Sí', className: 'badge success' };
+  }
+
+  if (isUnitDose === false) {
+    return { label: 'No consta dosis unitaria', className: 'badge warning' };
+  }
+
+  return { label: 'Sin dato SCMFH', className: 'badge' };
+}
+
+function formatUnitDoseAvailability(isUnitDose: boolean | null): string {
+  if (isUnitDose === true) {
+    return 'Sí';
+  }
+
+  if (isUnitDose === false) {
+    return 'No consta';
+  }
+
+  return 'Sin dato';
+}
+
+function unitDoseDescription(isUnitDose: boolean | null): string {
+  if (isUnitDose === true) {
+    return 'No requiere reenvasado según caché SCMFH.';
+  }
+
+  if (isUnitDose === false) {
+    return 'SCMFH no marca este CN como disponible en dosis unitaria.';
+  }
+
+  return 'No hay dato SCMFH persistido para este CN.';
+}
+
 function supplyBadge(status: string): BadgeDescriptor {
   if (status === 'Sin problemas de suministro') {
     return { label: `Suministro: ${status}`, className: 'badge success' };
@@ -140,6 +176,7 @@ export default async function CatalogDetailPage({ params }: PageProps) {
   );
   const commercialization = commercializationBadge(detail.commercializationStatus);
   const supply = detail.supplyStatus ? supplyBadge(detail.supplyStatus) : null;
+  const unitDose = unitDoseBadge(detail.isUnitDose);
   const bifimedFunding = detail.bifimedFundingStatus ? bifimedBadge(detail.bifimedFundingStatus) : null;
   const hasBifimedData = Boolean(
     detail.bifimedFundingStatus ||
@@ -197,6 +234,7 @@ export default async function CatalogDetailPage({ params }: PageProps) {
             {detail.hospitalStatusOriginal ? <span className="badge">Orion: {detail.hospitalStatusOriginal}</span> : null}
             <span className={commercialization.className}>{commercialization.label}</span>
             {supply ? <span className={supply.className}>{supply.label}</span> : null}
+            <span className={unitDose.className}>{unitDose.label}</span>
             {bifimedFunding ? <span className={bifimedFunding.className}>{bifimedFunding.label}</span> : null}
           </div>
         </div>
@@ -250,6 +288,39 @@ export default async function CatalogDetailPage({ params }: PageProps) {
           <div style={{ gridColumn: '1 / -1' }}>
             <DetailField label="Descripción local" value={detail.localDescription ?? 'Sin descripción local'} />
           </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="section-title">
+          <div>
+            <h2>Preparación / dosis unitaria</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Información SCMFH persistida en caché local para uso operativo prudente.
+            </p>
+          </div>
+          <span className={unitDose.className}>{unitDose.label}</span>
+        </div>
+
+        <p className="muted" style={{ margin: '0 0 16px' }}>
+          {unitDoseDescription(detail.isUnitDose)}
+        </p>
+
+        <div className="grid cols-2" style={{ gap: 12 }}>
+          <DetailField
+            label="Disponible en dosis unitaria"
+            value={formatUnitDoseAvailability(detail.isUnitDose)}
+            emphasized={detail.isUnitDose === true}
+          />
+          <DetailField
+            label="Reenvasado"
+            value={detail.isUnitDose === true ? 'No requerido' : 'No determinado por SCMFH'}
+            emphasized={detail.isUnitDose === true}
+          />
+          <DetailField label="Valor SCMFH original" value={detail.unitDoseRaw ?? 'Sin dato'} />
+          <DetailField label="Cantidad" value={detail.unitDoseQuantity ?? 'Sin dato'} />
+          <DetailField label="Última importación SCMFH" value={formatDate(detail.unitDoseImportedAt)} />
+          <DetailField label="Fichero origen SCMFH" value={detail.unitDoseSourceFileName ?? 'Sin dato'} />
         </div>
       </section>
 

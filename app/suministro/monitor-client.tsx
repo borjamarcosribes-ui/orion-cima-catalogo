@@ -149,6 +149,30 @@ function getCommercializationLabel(value: MedicineAlternative['commercialization
   }
 }
 
+function getUnitDoseLabel(value: boolean | null): string {
+  if (value === true) {
+    return 'Sí';
+  }
+
+  if (value === false) {
+    return 'No consta';
+  }
+
+  return 'Sin dato';
+}
+
+function getUnitDoseBadge(value: boolean | null): { label: string; className: string } {
+  if (value === true) {
+    return { label: 'No requiere reenvasado', className: 'badge success' };
+  }
+
+  if (value === false) {
+    return { label: 'Unidosis: No consta', className: 'badge' };
+  }
+
+  return { label: 'Sin dato SCMFH', className: 'badge' };
+}
+
 function getSupplyLabel(value: MedicineAlternative['supplyStatus']): string {
   switch (value) {
     case 'CON_ROTURA':
@@ -918,6 +942,7 @@ export default function MonitorClient({
                                               <th>Presentación</th>
                                               <th>Comercializado</th>
                                               <th>Rotura</th>
+                                              <th>Unidosis</th>
                                               <th>Inicio</th>
                                               <th>Fin esperado</th>
                                               <th>Observaciones</th>
@@ -926,23 +951,31 @@ export default function MonitorClient({
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {visibleAlternatives.map((alternative) => (
-                                              <tr key={alternative.cn}>
-                                                <td>{alternative.cn}</td>
-                                                <td>{alternative.presentation}</td>
-                                                <td>{getCommercializationLabel(alternative.commercializationStatus)}</td>
-                                                <td>{getSupplyLabel(alternative.supplyStatus)}</td>
-                                                <td>{formatDateOnly(alternative.supplyStartedAt)}</td>
-                                                <td>{formatDateOnly(alternative.supplyExpectedEndAt)}</td>
-                                                <td>{alternative.supplyObservations ?? '—'}</td>
-                                                <td>{getHospitalPresenceLabel(alternative.hospitalPresenceStatus)}</td>
-                                                <td>
-                                                  {alternative.hospitalPresenceStatus === 'NO_PRESENTE'
-                                                    ? '—'
-                                                    : alternative.hospitalStatusNormalized ?? '—'}
-                                                </td>
-                                              </tr>
-                                            ))}
+                                            {visibleAlternatives.map((alternative) => {
+                                              const unitDose = getUnitDoseBadge(alternative.isUnitDose);
+
+                                              return (
+                                                <tr key={alternative.cn}>
+                                                  <td>{alternative.cn}</td>
+                                                  <td>{alternative.presentation}</td>
+                                                  <td>{getCommercializationLabel(alternative.commercializationStatus)}</td>
+                                                  <td>{getSupplyLabel(alternative.supplyStatus)}</td>
+                                                  <td>
+                                                    <div>{getUnitDoseLabel(alternative.isUnitDose)}</div>
+                                                    <span className={unitDose.className}>{unitDose.label}</span>
+                                                  </td>
+                                                  <td>{formatDateOnly(alternative.supplyStartedAt)}</td>
+                                                  <td>{formatDateOnly(alternative.supplyExpectedEndAt)}</td>
+                                                  <td>{alternative.supplyObservations ?? '—'}</td>
+                                                  <td>{getHospitalPresenceLabel(alternative.hospitalPresenceStatus)}</td>
+                                                  <td>
+                                                    {alternative.hospitalPresenceStatus === 'NO_PRESENTE'
+                                                      ? '—'
+                                                      : alternative.hospitalStatusNormalized ?? '—'}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
                                           </tbody>
                                         </table>
                                       </div>
