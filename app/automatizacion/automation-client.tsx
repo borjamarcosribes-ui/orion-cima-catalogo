@@ -33,7 +33,8 @@ type ProcessFilter =
   | "CIMA_WATCHED"
   | "CIMA_ALL"
   | "BIFIMED_ALL"
-  | "SUPPLY_EMAIL_DIGEST";
+  | "SUPPLY_EMAIL_DIGEST"
+  | "UNIT_DOSE_CACHE";
 
 function formatDateTime(value: string | null): string {
   if (!value) {
@@ -750,6 +751,7 @@ export default function AutomationClient({
                 <option value="SUPPLY_EMAIL_DIGEST">
                   Digest diario por email
                 </option>
+                <option value="UNIT_DOSE_CACHE">SCMFH unidosis</option>
               </select>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
