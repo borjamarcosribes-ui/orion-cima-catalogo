@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { requireAdminApiKey } from '@/lib/admin-api-key';
 import { prisma } from '@/lib/prisma';
 import { runScheduledJob, type ScheduledJobExecutionResult } from '@/lib/scheduled-jobs';
 
@@ -9,17 +10,6 @@ export const dynamic = 'force-dynamic';
 const BIFIMED_BASE_URL =
   process.env.BIFIMED_BASE_URL?.trim() || 'https://www.sanidad.gob.es/profesionales/medicamentos.do';
 
-function isAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) {
-    throw new Error('Falta CRON_SECRET en el entorno.');
-  }
-
-  const authorization = request.headers.get('authorization');
-  const headerSecret = request.headers.get('x-cron-secret');
-
-  return authorization === `Bearer ${secret}` || headerSecret === secret;
-}
 
 function parsePositiveInt(value: string | null, fallback: number): number {
   if (!value) {
@@ -680,8 +670,9 @@ async function executeBifimedCacheRefresh(input: {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!isAuthorized(request)) {
-      return NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
+    const adminCheck = requireAdminApiKey(request);
+    if (!adminCheck.ok) {
+      return adminCheck.response;
     }
 
     const limit = parsePositiveInt(request.nextUrl.searchParams.get('limit'), 1000);

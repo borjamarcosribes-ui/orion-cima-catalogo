@@ -70,7 +70,8 @@ No se deben commitear secretos reales. Configurar cada entorno con valores propi
 | `DATABASE_URL` | Cadena de conexión PostgreSQL usada por Prisma. |
 | `AUTH_SECRET` | Secreto de Auth.js/NextAuth para sesiones y firma. |
 | `AUTH_URL` | URL pública o interna de la aplicación en el entorno. |
-| `CRON_SECRET` | Secreto compartido para proteger endpoints `/api/jobs/*`. |
+| `CRON_SECRET` | Secreto compartido para proteger endpoints programados generales `/api/jobs/*`. |
+| `ADMIN_API_KEY` | API key temporal para operaciones internas sensibles de importación/sincronización; se envía con `X-Admin-API-Key`. |
 | `NOMENCLATOR_ZIP_URL` | URL del ZIP oficial del nomenclátor, si se usa descarga automática. |
 | `NOMENCLATOR_XML_PATH` | Ruta local de fallback para importar XML del nomenclátor. |
 | `NOMENCLATOR_TEMP_DIR` | Directorio temporal para descarga/extracción del nomenclátor. |
@@ -171,7 +172,7 @@ generated/           Prisma Client generado localmente, ignorado en Git
 
 ## Jobs y automatizaciones
 
-Los jobs HTTP están bajo `/api/jobs/*` y se protegen con `CRON_SECRET`. Cada llamada debe incluir la cabecera `x-cron-secret` con el valor configurado o autenticación `Authorization: Bearer <CRON_SECRET>`.
+Los jobs HTTP están bajo `/api/jobs/*`. Las sincronizaciones sensibles de CIMA y BIFIMED (`/api/jobs/cima-cache` y `/api/jobs/bifimed-cache`) requieren `ADMIN_API_KEY` y la cabecera `X-Admin-API-Key`. El resto de jobs programados mantiene `CRON_SECRET` con `x-cron-secret` o `Authorization: Bearer <CRON_SECRET>`.
 
 Ver detalle en [docs/scheduled-jobs.md](docs/scheduled-jobs.md) y el checklist operativo en [CHECKLIST_AUTOMATIZACIONES_HOSPITAL.md](CHECKLIST_AUTOMATIZACIONES_HOSPITAL.md).
 

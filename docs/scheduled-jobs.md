@@ -4,9 +4,9 @@ Integramécum expone jobs programados como endpoints HTTP bajo `/api/jobs/*`. Es
 
 ## Seguridad de los jobs
 
-Todos los endpoints de jobs requieren `CRON_SECRET` configurado en el entorno.
+Los endpoints programados generales requieren `CRON_SECRET` configurado en el entorno. Las sincronizaciones internas sensibles de CIMA y BIFIMED (`POST /api/jobs/cima-cache` y `POST /api/jobs/bifimed-cache`) requieren `ADMIN_API_KEY` configurado y no usan el mecanismo de `CRON_SECRET`.
 
-La llamada debe enviar uno de estos mecanismos:
+Para los jobs con `CRON_SECRET`, la llamada debe enviar uno de estos mecanismos:
 
 ```http
 x-cron-secret: <CRON_SECRET>
@@ -18,7 +18,13 @@ O bien:
 Authorization: Bearer <CRON_SECRET>
 ```
 
-No se deben publicar ni commitear valores reales de `CRON_SECRET`.
+Para las sincronizaciones CIMA/BIFIMED protegidas con la clave administrativa temporal:
+
+```http
+X-Admin-API-Key: <ADMIN_API_KEY>
+```
+
+No se deben publicar ni commitear valores reales de `CRON_SECRET` ni `ADMIN_API_KEY`.
 
 ## Trazabilidad, locks e histórico
 
@@ -67,7 +73,7 @@ Variables relacionadas:
 
 ### `POST /api/jobs/cima-cache`
 
-Refresca la caché local de CIMA.
+Refresca la caché local de CIMA. Requiere `ADMIN_API_KEY` y la cabecera `X-Admin-API-Key`.
 
 Parámetros opcionales por query string:
 
@@ -82,7 +88,7 @@ Variable relacionada:
 
 ### `POST /api/jobs/bifimed-cache`
 
-Refresca la caché local de BIFIMED para los CN del catálogo.
+Refresca la caché local de BIFIMED para los CN del catálogo. Requiere `ADMIN_API_KEY` y la cabecera `X-Admin-API-Key`.
 
 Parámetros opcionales por query string:
 
@@ -135,6 +141,11 @@ Variables relacionadas:
 curl -X POST \
   -H "x-cron-secret: ${CRON_SECRET}" \
   "https://integramecum.interno.example/api/jobs/supply-monitor"
+
+# Sincronización sensible protegida por clave administrativa temporal
+curl -X POST \
+  -H "X-Admin-API-Key: ${ADMIN_API_KEY}" \
+  "https://integramecum.interno.example/api/jobs/cima-cache"
 ```
 
 Ajustar la URL al dominio interno real. No incluir secretos reales en documentación, tickets o repositorios.
